@@ -20,6 +20,9 @@
 #include "Engine/Engine.h"
 #include "Engine/Resources/EngineFileSystem.h"
 #include "Engine/EngineGlobals.h"
+
+#include "Engine/VR/VRManager.h"
+
 #include "Engine/Graphics/BspRenderer.h"
 #include "Engine/Graphics/Image.h"
 #include "Engine/Graphics/ImageLoader.h"
@@ -279,12 +282,15 @@ void OpenGLRenderer::RasterLine2D(Pointi a, Pointi b, Color acolor, Color bcolor
 void OpenGLRenderer::BeginScene3D() {
     // Setup for 3D
 
-    if (outputRender != outputPresent) {
+    if (outputRender != outputPresent && !VRManager::Get().IsRenderingVREye()) {
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTextures[0], 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebufferTextures[1], 0);
 
         GL_Check_Framebuffer(__FUNCTION__);
+
+        // Restore viewport for desktop rendering
+        glViewport(0, 0, outputRender.w, outputRender.h);
     }
 
     glDepthMask(GL_TRUE);
@@ -935,6 +941,11 @@ void OpenGLRenderer::DeleteTexture(TextureRenderId id) {
 
 // TODO(pskelton): to camera?
 void OpenGLRenderer::_set_3d_projection_matrix() {
+    if (VRManager::Get().IsRenderingVREye()) {
+        projmat = VRManager::Get().GetCurrentProjectionMatrix();
+        return;
+    }
+
     float near_clip = pCamera3D->GetNearClip();
     float far_clip = pCamera3D->GetFarClip();
 
@@ -944,6 +955,13 @@ void OpenGLRenderer::_set_3d_projection_matrix() {
 
 // TODO(pskelton): to camera?
 void OpenGLRenderer::_set_3d_modelview_matrix() {
+    if (VRManager::Get().IsRenderingVREye()) {
+        // Use camera position as world origin for VR
+        glm::vec3 worldOrigin(pCamera3D->vCameraPos.x, pCamera3D->vCameraPos.y, pCamera3D->vCameraPos.z);
+        viewmat = VRManager::Get().GetCurrentViewMatrix(worldOrigin);
+        return;
+    }
+
     float camera_x = pCamera3D->vCameraPos.x;
     float camera_y = pCamera3D->vCameraPos.y;
     float camera_z = pCamera3D->vCameraPos.z;

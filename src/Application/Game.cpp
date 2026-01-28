@@ -87,6 +87,8 @@
 #include "GameMenu.h"
 #include "GameStates/GameFsmBuilder.h"
 
+#include "Engine/VR/VRManager.h"
+
 Game::Game(PlatformApplication *application, std::shared_ptr<GameConfig> config) {
     _application = application;
     _config = config;
@@ -131,6 +133,8 @@ int Game::run() {
             startingState = "MainMenu";
         }
     } while (true);
+
+    VRManager::Get().Shutdown();
 
     return 0;
 }

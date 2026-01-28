@@ -1,161 +1,118 @@
-# Might and Magic 7 VR Mod
+# Might and Magic 7 VR Mod (OpenEnroth)
 
-This is a VR modification for the game Might and Magic 7, built upon the [OpenEnroth](https://github.com/OpenEnroth/OpenEnroth) project.
-Our goal is to implement Virtual Reality support for the MM7 engine.
+This project is a fork of [OpenEnroth](https://github.com/OpenEnroth/OpenEnroth) aiming to implement Virtual Reality support for **Might and Magic VII** using **OpenXR**.
 
-# Might and Magic Trilogy (Original README below)
+## 🚀 Current Status: MVP (Minimum Viable Product)
+
+- **3DOF Tracking**: Headset orientation controls the in-game camera view.
+- **Stereoscopic Rendering**: Full 3D world rendering for both eyes (Left/Right).
+- **Input**: Standard Keyboard & Mouse controls.
+  - **WASD**: Move Party.
+  - **Mouse**: Rotate Party Body.
+  - **Headset**: Look around (Independent Head/Body rotation).
+- **Engine**: Based on OpenEnroth (modern C++ reimplementation of MM7 engine).
+- **Backend**: OpenXR (Compatible with SteamVR, Oculus/Meta, Windows Mixed Reality).
+
+> **Note**: This is an early development version. The HUD (User Interface) is currently hidden in VR to prevent rendering artifacts, and positional tracking (6DOF) is not yet implemented.
+
+---
+
+## 🛠 Prerequisites
+
+To run or build this mod, you need:
+
+1.  **Game Data**: The original Might and Magic VII game assets (`ANIMS`, `DATA`, `MUSIC`, `SOUNDS`).
+2.  **VR Runtime**: [SteamVR](https://store.steampowered.com/app/250820/SteamVR/) (Recommended) or any OpenXR-compliant runtime.
+3.  **Development Tools** (only for building):
+    - **CMake** 3.20 or newer.
+    - **C++ Compiler** (Visual Studio 2019/2022 recommended for Windows).
+    - **SDL3** (Used for window/context management).
+
+---
+
+## ⚙️ How to Build
+
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/YourUsername/mm7_vr.git
+    cd mm7_vr
+    ```
+
+2.  **Configure with CMake**:
+    ```bash
+    mkdir build
+    cd build
+    cmake ..
+    ```
+    *The build system will automatically fetch the OpenXR SDK and other necessary dependencies via FetchContent.*
+
+3.  **Compile**:
+    Open the generated solution in Visual Studio or run:
+    ```bash
+    cmake --build . --config Release
+    ```
+
+4.  **Install**:
+    Copy the compiled `OpenEnroth.exe` to your MM7 game folder (where the `DATA` folder is located).
+
+---
+
+## 🎮 How to Run (SteamVR)
+
+1.  **Start SteamVR**: Ensure your VR headset is connected and recognized by SteamVR.
+2.  **Launch the Game**: Run `OpenEnroth.exe`.
+3.  **Play**: The game should automatically render to your headset.
+    *   If the headset display is black, check if SteamVR is set as your default OpenXR runtime (`SteamVR Settings > Developer > Set SteamVR as OpenXR Runtime`).
+    *   Use **Keyboard/Mouse** to play standard MM7, but with the immersive view of VR.
+
+---
+
+## 🧠 Technical Implementation Details
+
+This VR implementation integrates deeply with the OpenEnroth engine while keeping the VR subsystem modular.
+
+### 1. VR Subsystem (`src/Engine/VR/`)
+We introduced a singleton class `VRManager` to handle all OpenXR interactions:
+*   **OpenXR Integration**: Manages the `XrInstance`, `XrSession`, and `XrSpace`.
+*   **Swapchain Management**: Handles double-buffered swapchains for stereo rendering.
+*   **Coordinate System Conversion**: Converts OpenXR's **Y-Up** (Right-Handed) coordinate system to OpenEnroth's **Z-Up** system on the fly.
+*   **Windows 11 Compatibility**: Utilizes **SDL3** to reliably retrieve native window handles (`HWND`) and OpenGL contexts (`HGLRC`) required for OpenXR session creation on modern Windows versions.
+
+### 2. Render Pipeline Interventions
+The rendering flow was modified to inject VR frames before the main desktop presentation.
+
+#### **Engine Loop (`src/Engine/Engine.cpp`)**
+The `Engine::Draw()` method was modified to support a multi-pass render loop:
+1.  **Check VR State**: If VR is initialized, begin the OpenXR frame.
+2.  **Stereo Pass**: Loop through both eyes (Index 0 and 1):
+    *   Acquire OpenXR Swapchain Image.
+    *   Bind the VR Framebuffer (FBO).
+    *   **Render World**: Calls `drawWorld()` with VR-specific flags.
+    *   Release Swapchain Image.
+3.  **Submit Frame**: Calls `xrEndFrame` to send layers to the compositor.
+4.  **Desktop Pass**: Continues to render the standard view to the desktop window for debugging/spectator view.
+
+#### **Renderer (`src/Engine/Graphics/Renderer/OpenGLRenderer.cpp`)**
+Modifications were made to the core OpenGL renderer to support external view matrices:
+*   **Matrix Override**: `_set_3d_modelview_matrix` and `_set_3d_projection_matrix` now check `VRManager::IsRenderingVREye()`. If true, they bypass the standard `Camera3D` calculations and use the matrices provided by `VRManager` (derived from HMD pose).
+*   **State Management**: `BeginScene3D` was updated to respect the currently bound VR framebuffer instead of forcing a reset to the default backbuffer.
+
+### 3. Build System (`CMakeLists.txt`)
+*   Added `FetchContent` logic to automatically download and link the **OpenXR SDK**.
+*   Created a static library target `engine_vr` to encapsulate VR logic.
+
+---
+
+# Might and Magic Trilogy (Original OpenEnroth README)
 
 [![Windows](https://github.com/OpenEnroth/OpenEnroth/workflows/Windows/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/windows.yml) 
 [![Linux](https://github.com/OpenEnroth/OpenEnroth/workflows/Linux/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/linux.yml) 
 [![MacOS](https://github.com/OpenEnroth/OpenEnroth/workflows/MacOS/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/macos.yml) 
-[![Doxygen](https://github.com/OpenEnroth/OpenEnroth/workflows/Doxygen/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/doxygen.yml) 
-[![Style Checker](https://github.com/OpenEnroth/OpenEnroth/workflows/Style/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/style.yml)
 
-We are creating an extensible engine & modding environment that would make it possible to play original Might & Magic VI-VIII
-games on modern platforms with improved graphics and quality-of-life features expected of modern titles, and make modding and
-installing & playing the mods a pleasurable experience.
+We are creating an extensible engine & modding environment that would make it possible to play original Might & Magic VI-VIII games on modern platforms with improved graphics and quality-of-life features.
 
-Currently only MM7 is playable. You can check out the [milestones](https://github.com/OpenEnroth/OpenEnroth/milestones) to
-see where we're at.
+Currently only MM7 is playable.
 
-![screenshot_main](https://user-images.githubusercontent.com/24377109/79051217-491a7800-7c2f-11ea-85c7-f9120b7d79dd.png)
-
-# Download
-
-To download the code without having to compile it we have our releases at
-[https://github.com/OpenEnroth/OpenEnroth/releases](https://github.com/OpenEnroth/OpenEnroth/releases) 
-
-Currently there are only the nightly builds which may have bugs.
-
-# Discord
-
-Join our discord channel to discuss, track progress or get involved in the development of this project.
-
-[![Discord channel invite](https://img.shields.io/badge/chat-on%20discord-green.svg)](https://discord.gg/jRCyPtq) 
-
-
-# Getting Started
-
-Regardless of what system you want to play OpenEnroth on, you will need a copy of OpenEnroth and the Might and Magic VII
-game data. Where and how you install these on your computer depends on your operating system.
-
-## Getting the game data
-
-You can buy Might and Magic VII from [gog.com](https://www.gog.com/en/game/might_and_magic_7_for_blood_and_honor) and
-download the installer from there; if you have a copy from another source (eg. an original retail disc) this should
-also work with OpenEnroth.
-
-At the very least, OpenEnroth requires the `ANIMS`, `DATA`, `MUSIC` and `SOUNDS` directories from the game data.
-
-### Non-GOG versions
-
-Install or extract your copy of the game as normal.
-
-### GOG Version
-
-#### Windows
-
-On Windows, you can simply run the installer to extract the game data to your computer.
-
-#### Linux and macOS
-
-The installer cannot be run directly on Linux and macOS but you can use `innoextract` to extract its contents.
-
-* On macOS, install [Homebrew](https://brew.sh/) if you don't have it already (run `brew --version` in a Terminal
-  window to see if you do) and install `innoextract` using `brew install innoextract`
-* On Linux, the exact command depends on your distribution.
-  * For Ubuntu or Debian-based systems (including eg. Linux Mint, Pop!OS, etc): `sudo apt install -y innoextract`
-  * For Fedora or other RedHat-based systems (*except* for "immutable" distributions like Bazzite):
-    `sudo dnf install -y innoextract`
-  * For other systems, please check the distribution's user guide. [Repology](https://repology.org/project/innoextract/versions)
-    has an extensive list of Linux distributions and the name of the package for innoextract on each.
-
-Once you have innoextract, create a new directory for the game data, then open a terminal window and run:
-
-`innoextract -e -d <new game data directory> <path to GOG installer .exe>`
-
-This will extract the game data to the new directory.
-
-### Game Assets Path Override
-
-You can set an environment variable called `OPENENROTH_MM7_PATH` to point to the location of the game data.
-If this variable is set, OpenEnroth will look for game assets only in the location it's pointing to. You
-might also want to add the following line to your shell profile (e.g. `~/.profile` on Linux or `~/.zshrc` on Mac):
-
-```
-export OPENENROTH_MM7_PATH="<path-to-mm7-game-assets>"
-```
-
-## Installing OpenEnroth
-
-### Windows
-
-1. Download one of the prebuilt [releases](https://github.com/OpenEnroth/OpenEnroth/releases) and unzip the files.
-2. Copy `OpenEnroth.exe` and `OpenEnroth.pdb` to the directory containing the game data.
-3. Run `OpenEnroth.exe`.
-
-### macOS
-
-1. Move the game data to `~/Library/Application Support/OpenEnroth`, creating this directory if needed.
-2. Download one of the prebuilt [releases](https://github.com/OpenEnroth/OpenEnroth/releases) and unzip
-   the files.
-3. Run `xattr -rc <extracted-path>/dist/OpenEnroth.app`. This is needed because OpenEnroth binaries are
-   unsigned, without this step the app bundle won't start.
-4. Run `OpenEnroth.app`.
-
-### Linux (Flatpak)
-
-The Flatpak package is the easiest choice if you aren't using Ubuntu 24.04, or you cannot install system
-packages on your computer for any reason (as long as Flatpak is available), e.g. because you're using
-an "atomic"/"immutable" Linux distribution such as Bazzite or SteamOS.
-
-1. Check for Flatpak support:
-   * Run `flatpak --version`.
-   * If you receive a message listing a version number, you're ready to go; otherwise please visit
-    [https://flatpak.org/setup/](https://flatpak.org/setup/) and follow instructions there to set up.
-2. Install OpenEnroth:
-   * Download the `io.github.openenroth.openenroth_*.flatpak` package from one of the
-     prebuilt [releases](https://github.com/vallewillian-source/open-enroth-vr/releases).
-   * Run `flatpak install --user /path/to/io.github.openenroth.openenroth_*.flatpak` to install the OpenEnroth
-     package.
-   * Create `~/.var/app/io.github.openenroth.openenroth/data/mm7/data/`
-   * Move the game data (at least the `ANIMS`, `DATA`, `MUSIC` and `SOUNDS` directories) into this new directory
-3. Run OpenEnroth from your desktop's application menu or using `flatpak run io.github.openenroth.openenroth`
-
-### Linux (Loose executable)
-
-The loose executable bundle is the easier option if:
-* You want easy access to the OpenEnroth executable for development or debugging
-* You absolutely need specific control over the installation location for OpenEnroth and the game data
-* You can install system packages (specifically, `libdwarf`, `libelf` and `libgl1`)
-* You're using Ubuntu 24.04 - other distributions may not have the required libraries available
-  or not in compatible versions
-
-1. Install the required libraries (`libdwarf`, `libelf` and `libgl1`):
-   * `sudo apt-get install libdwarf1 libelf++* libgl1` (Ubuntu 24.04)
-   * For other distributions, check your distribution's user guides and package management tools to find
-     the correct package names for these libraries.
-2. Install OpenEnroth:
-   * Download one of the prebuilt [releases](https://github.com/OpenEnroth/OpenEnroth/releases) and unzip
-     the files
-   * Copy the game data (at least the `ANIMS`, `DATA`, `MUSIC` and `SOUNDS` directories) to the directory
-     you unzipped the release to, next to the `OpenEnroth` executable
-4. Run the `OpenEnroth` executable (you may need to run `chmod a+x OpenEnroth` first) from a terminal
-   or by double-clicking it in a file browser.
-
-
-# Development
-
-See the [HACKING](HACKING.md) document for information on how to compile or if you intend to contribute.
-
-See the code [DOCUMENTATION](https://openenroth.github.io/OpenEnroth/index.html).
-
-# Screenshots
-
-![screenshot_1](https://user-images.githubusercontent.com/24377109/79051879-f04cde80-7c32-11ea-939d-1dcc97b46f5d.png)
-
-![screenshot_2](https://user-images.githubusercontent.com/24377109/79051881-f17e0b80-7c32-11ea-82cd-5e4993a1c071.png)
-
-![screenshot_3](https://user-images.githubusercontent.com/24377109/79051882-f3e06580-7c32-11ea-974f-414f68394190.png)
-
-![screenshot_4](https://user-images.githubusercontent.com/24377109/79051883-f5119280-7c32-11ea-801c-1595709d8060.png)
+## Original Project Links
+*   **GitHub**: [OpenEnroth/OpenEnroth](https://github.com/OpenEnroth/OpenEnroth)
+*   **Discord**: [Join the community](https://discord.gg/jRCyPtq)

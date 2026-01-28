@@ -8,6 +8,8 @@
 #include "Engine/EngineGlobals.h"
 #include "Engine/AssetsManager.h"
 
+#include "Engine/VR/VRManager.h"
+
 #include "Engine/Evt/Processor.h"
 #include "Engine/Graphics/Camera.h"
 #include "Engine/Graphics/DecalBuilder.h"
@@ -194,6 +196,31 @@ void Engine::drawHUD() {
 
 //----- (0044103C) --------------------------------------------------------
 void Engine::Draw() {
+    if (VRManager::Get().IsInitialized()) {
+        if (VRManager::Get().BeginFrame()) {
+            // Render VR Views
+            for (int i = 0; i < 2; ++i) {
+                unsigned int textureId = VRManager::Get().AcquireSwapchainTexture(i);
+                if (textureId != 0) {
+                    VRManager::Get().BindSwapchainFramebuffer(i);
+                    
+                    // Clear is important because we are drawing to a new framebuffer
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    VRManager::Get().SetCurrentViewIndex(i);
+                    VRManager::Get().SetIsRenderingVREye(true);
+
+                    drawWorld();
+                    // drawHUD(); // Skip HUD for now in VR world space to avoid issues
+
+                    VRManager::Get().SetIsRenderingVREye(false);
+                    VRManager::Get().ReleaseSwapchainTexture(i);
+                }
+            }
+            VRManager::Get().EndFrame();
+        }
+    }
+
     drawWorld();
     drawHUD();
     render->flushAndScale();

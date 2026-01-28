@@ -9,6 +9,19 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedd
 
 project("OpenEnroth")
 
+# OpenXR Support
+include(FetchContent)
+FetchContent_Declare(
+    OpenXR-SDK
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+    GIT_TAG release-1.1.46
+)
+set(BUILD_LOADER ON CACHE BOOL "" FORCE)
+set(BUILD_API_LAYERS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(OPENXR_INSTALL_TO_CMAKE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(OpenXR-SDK)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
