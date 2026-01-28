@@ -15,6 +15,7 @@
 #include "Engine/EngineGlobals.h"
 #include "Engine/EngineIocContainer.h"
 #include "Engine/Resources/EngineFileSystem.h"
+#include "Engine/VR/VRManager.h"
 #include "Engine/Graphics/Renderer/RendererFactory.h"
 #include "Engine/Graphics/Renderer/Renderer.h"
 #include "Engine/Components/Trace/EngineTracePlayer.h"
@@ -185,6 +186,18 @@ void GameStarter::initialize() {
     _engine = std::make_unique<Engine>(_config, *_overlaySystem);
     ::engine = _engine.get();
     _engine->Initialize();
+
+    logger->info("Initializing VR...");
+    if (VRManager::Get().Initialize()) {
+        logger->info("VR Initialized. Creating Session...");
+        if (VRManager::Get().CreateSession(nullptr, nullptr)) {
+            logger->info("VR Session Created successfully.");
+        } else {
+            logger->error("Failed to create VR Session.");
+        }
+    } else {
+        logger->warning("VR Initialization failed.");
+    }
 
     // Init game.
     _game = std::make_unique<Game>(_application.get(), _config);

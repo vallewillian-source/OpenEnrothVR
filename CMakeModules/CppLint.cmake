@@ -17,8 +17,13 @@ function(source_check_style TARGET TARGET_SOURCES)
             endif()
         endforeach(SOURCE_FILE)
 
+        set(CPPLINT_ARGS "--quiet")
+        if(WIN32)
+            list(APPEND CPPLINT_ARGS "--filter=-whitespace/newline")
+        endif()
+
         add_custom_target(${TARGET_NAME}
-                COMMAND Python::Interpreter ${OE_CPPLINT_COMMAND} "--quiet" ${SOURCES_LIST}
+                COMMAND Python::Interpreter ${OE_CPPLINT_COMMAND} ${CPPLINT_ARGS} ${SOURCES_LIST}
                 DEPENDS ${SOURCES_LIST}
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         add_dependencies(check_style ${TARGET_NAME})

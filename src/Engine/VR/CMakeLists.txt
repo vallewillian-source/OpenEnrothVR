@@ -14,9 +14,11 @@ target_link_libraries(engine_vr PUBLIC OpenXR::openxr_loader)
 # Adicionar diretórios de inclusão
 target_include_directories(engine_vr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Se precisar de GLM
-find_package(glm REQUIRED)
 target_link_libraries(engine_vr PUBLIC glm::glm)
 
 # SDL3 para pegar handles nativos
 target_link_libraries(engine_vr PUBLIC SDL3::SDL3)
+
+target_link_libraries(engine_vr PRIVATE fmt::fmt)
+
+target_link_libraries(engine_vr PRIVATE glad)

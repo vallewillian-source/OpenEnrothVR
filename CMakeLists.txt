@@ -9,19 +9,6 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedd
 
 project("OpenEnroth")
 
-# OpenXR Support
-include(FetchContent)
-FetchContent_Declare(
-    OpenXR-SDK
-    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
-    GIT_TAG release-1.1.46
-)
-set(BUILD_LOADER ON CACHE BOOL "" FORCE)
-set(BUILD_API_LAYERS OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(OPENXR_INSTALL_TO_CMAKE OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(OpenXR-SDK)
-
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -36,7 +23,9 @@ include(CheckLinkerFlag)
 include(Assertions)
 
 # Defaults.
-if (CMAKE_BUILD_TYPE)
+if(WIN32)
+    set(OE_USE_PREBUILT_DEPENDENCIES_DEFAULT ON)
+elseif(CMAKE_BUILD_TYPE)
     set(OE_USE_PREBUILT_DEPENDENCIES_DEFAULT ON)
 else()
     set(OE_USE_PREBUILT_DEPENDENCIES_DEFAULT OFF)
@@ -228,6 +217,21 @@ endif()
 # See https://github.com/google/ExoPlayer/issues/9933#issuecomment-1029775358.
 if(OE_BUILD_PLATFORM STREQUAL "android")
     add_link_options("-Wl,-Bsymbolic")
+endif()
+
+include(FetchContent)
+FetchContent_Declare(
+    OpenXR-SDK
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+    GIT_TAG release-1.1.46
+)
+set(BUILD_LOADER ON CACHE BOOL "" FORCE)
+set(BUILD_API_LAYERS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(OPENXR_INSTALL_TO_CMAKE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(OpenXR-SDK)
+if(MSVC AND TARGET openxr_loader AND OE_USE_PREBUILT_DEPENDENCIES)
+    set_property(TARGET openxr_loader PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 init_check_style()

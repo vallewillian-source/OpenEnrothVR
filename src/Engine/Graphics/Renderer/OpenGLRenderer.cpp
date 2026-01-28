@@ -978,6 +978,15 @@ void OpenGLRenderer::_set_3d_modelview_matrix() {
 
 // TODO(pskelton): to camera?
 void OpenGLRenderer::_set_ortho_projection(bool gameviewport) {
+    if (VRManager::Get().IsRenderingVREye()) {
+        if (!gameviewport) {
+            projmat = glm::ortho(float(0), float(outputRender.w), float(outputRender.h), float(0), float(-1), float(1));
+        } else {
+            projmat = glm::ortho(float(pViewport.x), float(pViewport.x + pViewport.w - 1), float(pViewport.y + pViewport.h - 1), float(pViewport.y), float(1), float(-1));
+        }
+        return;
+    }
+
     if (!gameviewport) {  // project over entire window
         glViewport(0, 0, outputRender.w, outputRender.h);
         projmat = glm::ortho(float(0), float(outputRender.w), float(outputRender.h), float(0), float(-1), float(1));

@@ -203,9 +203,8 @@ void Engine::Draw() {
                 unsigned int textureId = VRManager::Get().AcquireSwapchainTexture(i);
                 if (textureId != 0) {
                     VRManager::Get().BindSwapchainFramebuffer(i);
-                    
-                    // Clear is important because we are drawing to a new framebuffer
-                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    render->ClearTarget(colorTable.Black);
 
                     VRManager::Get().SetCurrentViewIndex(i);
                     VRManager::Get().SetIsRenderingVREye(true);

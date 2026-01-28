@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <algorithm>
+#include <utility>
 
 #include "Library/Logger/Logger.h"
 #include "Library/Environment/Interface/Environment.h"
@@ -65,14 +67,13 @@ static const PathResolutionConfig mm8Config = {
 };
 
 static std::vector<std::string> resolvePaths(Environment *environment, const PathResolutionConfig &config) {
-    // If we have a path override then it'll be the only path we'll check.
+    std::vector<std::string> result;
+
     std::string envPath = environment->getenv(config.overrideEnvKey);
     if (!envPath.empty()) {
         logger->info("Path override provided, '{}={}'.", config.overrideEnvKey, envPath);
-        return {envPath};
+        result.push_back(envPath);
     }
-
-    std::vector<std::string> result;
 
     // Otherwise we check PWD first.
     result.push_back(std::filesystem::current_path().generic_string());
@@ -114,7 +115,34 @@ std::vector<std::string> resolveMm6Paths(Environment *environment) {
 }
 
 std::vector<std::string> resolveMm7Paths(Environment *environment) {
-    return resolvePaths(environment, mm7Config);
+    bool hasEnvOverride = !environment->getenv(mm7Config.overrideEnvKey).empty();
+    std::vector<std::string> base = resolvePaths(environment, mm7Config);
+    std::vector<std::string> result;
+
+    auto addUnique = [&result] (std::string value) {
+        if (std::find(result.begin(), result.end(), value) == result.end())
+            result.push_back(std::move(value));
+    };
+
+    std::filesystem::path p = std::filesystem::current_path();
+    std::vector<std::string> localCandidates;
+    for (int i = 0; i < 8; i++) {
+        localCandidates.push_back((p / "mm7_data").generic_string());
+        if (!p.has_parent_path())
+            break;
+        p = p.parent_path();
+    }
+
+    int cwdIndex = hasEnvOverride ? 1 : 0;
+    for (int i = 0; i < static_cast<int>(base.size()); i++) {
+        addUnique(base[i]);
+        if (i == cwdIndex) {
+            for (const std::string &candidate : localCandidates)
+                addUnique(candidate);
+        }
+    }
+
+    return result;
 }
 
 std::vector<std::string> resolveMm8Paths(Environment *environment) {

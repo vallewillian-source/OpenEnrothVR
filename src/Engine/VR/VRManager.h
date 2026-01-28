@@ -3,6 +3,10 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <unknwn.h>
+#ifdef DrawText
+#undef DrawText
+#endif
 #endif
 
 #define XR_USE_PLATFORM_WIN32
@@ -99,7 +103,12 @@ private:
     std::vector<VRView> m_views;
     std::vector<XrView> m_xrViews; // Raw views from OpenXR
     std::vector<XrCompositionLayerProjectionView> m_projectionViews;
+    XrEnvironmentBlendMode m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     
     bool m_isRenderingVR = false;
     int m_currentViewIndex = 0;
+
+    bool m_savedScissorStateValid = false;
+    bool m_savedScissorEnabled = false;
+    int m_savedScissorBox[4] = {0, 0, 0, 0};
 };
