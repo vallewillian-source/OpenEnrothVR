@@ -75,8 +75,9 @@ modules:
       - -DCMAKE_BUILD_TYPE=RelWithDbgInfo
       - -DCMAKE_LINKER=lld
     sources:
-      - type: dir
-        path: ../../../
+      - type: git
+        url: https://github.com/vallewillian-source/open-enroth-vr.git
+        branch: master
     # TODO(captainurist): would be cool to run game tests here too!
     run-tests: true
     test-rule: Run_UnitTest

@@ -78,7 +78,7 @@ modules:
       - -DCMAKE_LINKER=lld
     sources:
        - type: git
-         url: https://github.com/OpenEnroth/OpenEnroth.git
+         url: https://github.com/vallewillian-source/open-enroth-vr.git
          tag: v0.1
     post-install:
       - install -Dm755 src/Bin/OpenEnroth/OpenEnroth /app/bin/OpenEnroth

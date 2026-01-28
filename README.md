@@ -1,4 +1,9 @@
-# Might and Magic Trilogy
+# Might and Magic 7 VR Mod
+
+This is a VR modification for the game Might and Magic 7, built upon the [OpenEnroth](https://github.com/OpenEnroth/OpenEnroth) project.
+Our goal is to implement Virtual Reality support for the MM7 engine.
+
+# Might and Magic Trilogy (Original README below)
 
 [![Windows](https://github.com/OpenEnroth/OpenEnroth/workflows/Windows/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/windows.yml) 
 [![Linux](https://github.com/OpenEnroth/OpenEnroth/workflows/Linux/badge.svg)](https://github.com/OpenEnroth/OpenEnroth/actions/workflows/linux.yml) 
@@ -110,7 +115,7 @@ an "atomic"/"immutable" Linux distribution such as Bazzite or SteamOS.
     [https://flatpak.org/setup/](https://flatpak.org/setup/) and follow instructions there to set up.
 2. Install OpenEnroth:
    * Download the `io.github.openenroth.openenroth_*.flatpak` package from one of the
-     prebuilt [releases](https://github.com/OpenEnroth/OpenEnroth/releases).
+     prebuilt [releases](https://github.com/vallewillian-source/open-enroth-vr/releases).
    * Run `flatpak install --user /path/to/io.github.openenroth.openenroth_*.flatpak` to install the OpenEnroth
      package.
    * Create `~/.var/app/io.github.openenroth.openenroth/data/mm7/data/`

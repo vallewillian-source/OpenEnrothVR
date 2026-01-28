@@ -33,8 +33,8 @@ The following IDEs have been tested and should work fine:
 This project uses the [CMake](https://cmake.org) build system.  Use the following commands to clone the repository and build OpenEnroth:
 
 ```
-$ git clone --recurse-submodules --shallow-submodules https://github.com/OpenEnroth/OpenEnroth.git
-$ cd OpenEnroth
+$ git clone --recurse-submodules --shallow-submodules https://github.com/vallewillian-source/open-enroth-vr.git
+$ cd open-enroth-vr
 $ cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
 $ cmake --build build
 ```
@@ -51,7 +51,7 @@ You can also select platform dependent [generator](https://cmake.org/cmake/help/
 
 * Get git (`https://git-scm.com/download/win`) and Visual Studio 2022.
 * Make sure you have Windows SDK v10.0.20348.0 or higher.
-* Clone, fork or download the repo `https://github.com/OpenEnroth/OpenEnroth`.
+* Clone, fork or download the repo `https://github.com/vallewillian-source/open-enroth-vr`.
 * Setup CMake:
   * either install standalone cmake from the official website,
   * or add Microsoft one (that's coming with the VS installation) to your PATH environment variable (e.g `c:\Program Files\Microsoft Visual Studio\2022\<edition>\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`). 
