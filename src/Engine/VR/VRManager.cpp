@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "Engine/Graphics/Camera.h"
 #include "Library/Logger/Logger.h"
 
 static std::string_view xrResultName(XrResult result) {
@@ -379,8 +380,12 @@ bool VRManager::BeginFrame() {
         float right = tan(m_xrViews[i].fov.angleRight);
         float down = tan(m_xrViews[i].fov.angleDown);
         float up = tan(m_xrViews[i].fov.angleUp);
-        float nearZ = 0.1f; // TODO: Get from engine
-        float farZ = 1000.0f; // TODO: Get from engine
+        float nearZ = 4.0f; // Default near
+        float farZ = 30000.0f; // Default far
+        if (pCamera3D) {
+            nearZ = pCamera3D->GetNearClip();
+            farZ = pCamera3D->GetFarClip();
+        }
 
         // Create standard projection matrix
         // This might need adjustment for OpenEnroth's coordinate system
@@ -505,7 +510,7 @@ void VRManager::Shutdown() {
     }
 }
 
-glm::mat4 VRManager::GetCurrentViewMatrix(const glm::vec3& worldOrigin) {
+glm::mat4 VRManager::GetCurrentViewMatrix(const glm::vec3& worldOrigin, float yawRad, float pitchRad) {
     if (m_currentViewIndex < 0 || m_currentViewIndex >= m_views.size()) return glm::mat4(1.0f);
     
     // VR View Matrix (Headset -> Local Y-Up)
@@ -517,11 +522,18 @@ glm::mat4 VRManager::GetCurrentViewMatrix(const glm::vec3& worldOrigin) {
     // Y (0,1,0) -> -Z (0,0,-1)
     glm::mat4 coordConvert = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1, 0, 0));
     
+    // Game Rotation (Yaw)
+    // We rotate the world around Z by -Yaw to match the camera's orientation.
+    // We intentionally ignore pitch/roll from the game as the HMD provides those.
+    // Note: We might need to adjust the phase of yaw (e.g. + PI/2) depending on 0-angle convention.
+    // For now, assuming standard counter-clockwise Z rotation.
+    glm::mat4 gameRotation = glm::rotate(glm::mat4(1.0f), -yawRad, glm::vec3(0, 0, 1));
+    
     // Translation to World Origin (Party Position)
     // We invert the world origin to make it the camera position relative to origin
     glm::mat4 worldTrans = glm::translate(glm::mat4(1.0f), -worldOrigin);
     
-    return vrView * coordConvert * worldTrans;
+    return vrView * coordConvert * gameRotation * worldTrans;
 }
 
 glm::mat4 VRManager::GetCurrentProjectionMatrix() {

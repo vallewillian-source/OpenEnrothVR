@@ -958,7 +958,13 @@ void OpenGLRenderer::_set_3d_modelview_matrix() {
     if (VRManager::Get().IsRenderingVREye()) {
         // Use camera position as world origin for VR
         glm::vec3 worldOrigin(pCamera3D->vCameraPos.x, pCamera3D->vCameraPos.y, pCamera3D->vCameraPos.z);
-        viewmat = VRManager::Get().GetCurrentViewMatrix(worldOrigin);
+        
+        // Convert yaw to radians
+        // MM7 Yaw: 0-2048 = 0-360 degrees
+        float yawRad = (float)(pCamera3D->_viewYaw * 2.0 * pi_double / 2048.0);
+        float pitchRad = (float)(pCamera3D->_viewPitch * 2.0 * pi_double / 2048.0); // Not used for now but passed
+        
+        viewmat = VRManager::Get().GetCurrentViewMatrix(worldOrigin, yawRad, pitchRad);
         return;
     }
 

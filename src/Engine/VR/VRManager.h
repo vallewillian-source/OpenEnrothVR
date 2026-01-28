@@ -63,7 +63,7 @@ public:
     bool IsRenderingVREye() const { return m_isRenderingVR; }
 
     void SetCurrentViewIndex(int index) { m_currentViewIndex = index; }
-    glm::mat4 GetCurrentViewMatrix(const glm::vec3& worldOrigin);
+    glm::mat4 GetCurrentViewMatrix(const glm::vec3& worldOrigin, float yawRad = 0.0f, float pitchRad = 0.0f);
     glm::mat4 GetCurrentProjectionMatrix();
 
     // Binds the framebuffer for the current swapchain image of the specified view
