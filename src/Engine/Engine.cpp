@@ -144,6 +144,19 @@ void Engine::drawWorld() {
         float l, r, u, d;
         VRManager::Get().GetViewTangents(VRManager::Get().GetCurrentViewIndex(), l, r, u, d);
         pCamera3D->SetProjectionVR(l, r, u, d);
+
+        // Update View Matrix with HMD rotation (Stage 2 fix)
+        // Convert party yaw to radians
+        float yawRad = pParty->_viewYaw * (2.0f * 3.14159265359f / 2048.0f);
+        
+        // Get VR View Matrix (includes HMD rotation + Party Yaw + Party Pos)
+        glm::mat4 vrView = VRManager::Get().GetCurrentViewMatrix(
+            glm::vec3(pParty->pos.x, pParty->pos.y, pParty->pos.z),
+            yawRad,
+            0.0f // Pitch ignored by VRManager (uses HMD pitch)
+        );
+        
+        pCamera3D->SetViewMatrixVR(vrView);
     }
 
     pCamera3D->BuildViewFrustum();

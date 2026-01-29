@@ -199,11 +199,53 @@ void Camera3D::SetProjectionVR(float tanL, float tanR, float tanU, float tanD) {
     float w = (float)pViewport.w;
     float h = (float)pViewport.h;
 
+    // Use asymmetric projection parameters from OpenXR
+    // This ensures the 2D projection center matches the HMD's optical center.
+    
     screenScaleX = w / (tanR - tanL);
     screenCenterX = pViewport.x + w * (-tanL) / (tanR - tanL);
-
+    
     screenScaleY = h / (tanU - tanD);
     screenCenterY = pViewport.y + h * tanU / (tanU - tanD);
+}
+
+void Camera3D::SetViewMatrixVR(const glm::mat4& viewMat) {
+    // 1. Extract Camera Position from Inverse View Matrix
+    glm::mat4 invView = glm::inverse(viewMat);
+    glm::vec3 camPos = glm::vec3(invView[3]); // Translation column
+
+    vCameraPos.x = camPos.x;
+    vCameraPos.y = camPos.y;
+    vCameraPos.z = camPos.z;
+
+    // 2. Extract Rotation and Convert to Camera3D Coords
+    // OpenXR View: -Z Fwd, +X Right, +Y Up
+    // Camera3D View: +X Fwd, -Y Right (East), +Z Up
+    
+    // M_change to convert OpenXR View Vector to Camera3D View Vector:
+    // CamX = -XR_Z
+    // CamY = -XR_X
+    // CamZ = XR_Y
+    
+    // Matrix M (constructed column-by-column):
+    // Col 0 (from XR X): Maps to -CamY. Vector: (0, -1, 0).
+    // Col 1 (from XR Y): Maps to CamZ. Vector: (0, 0, 1).
+    // Col 2 (from XR Z): Maps to -CamX. Vector: (-1, 0, 0).
+    glm::mat3 M_change(
+        0, -1, 0,
+        0, 0, 1,
+        -1, 0, 0
+    );
+    
+    glm::mat3 R_xr = glm::mat3(viewMat);
+    glm::mat3 R_cam = M_change * R_xr;
+    
+    // Camera3D uses row vectors: v_out = v_in * ViewMatrix
+    // Equivalent to v_out_col = ViewMatrix^T * v_in_col
+    // We want v_out_col = R_cam * v_in_col
+    // So ViewMatrix^T = R_cam => ViewMatrix = transpose(R_cam)
+    
+    ViewMatrix = glm::transpose(R_cam);
 }
 
 void Camera3D::ResetProjection() {

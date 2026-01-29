@@ -71,6 +71,7 @@ struct Camera3D {
     float screenScaleY = 0;
 
     void SetProjectionVR(float tanL, float tanR, float tanU, float tanD);
+    void SetViewMatrixVR(const glm::mat4& viewMat);
     void ResetProjection();
 
     // Camera field of view angles in degrees and radians
