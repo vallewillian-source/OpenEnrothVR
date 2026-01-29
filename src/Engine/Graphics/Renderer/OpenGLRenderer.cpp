@@ -2267,6 +2267,16 @@ void OpenGLRenderer::flushAndScale() {
     }
 }
 
+void OpenGLRenderer::BindRenderFramebufferForRead() {
+    if (outputRender != outputPresent) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+    } else {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
+    }
+}
+
 void OpenGLRenderer::swapBuffers() {
     if (outputRender != outputPresent) {
         glEnable(GL_SCISSOR_TEST);

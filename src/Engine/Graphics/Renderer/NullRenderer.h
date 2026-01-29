@@ -69,6 +69,7 @@ class NullRenderer : public BaseRenderer {
     virtual void DoRenderBillboards_D3D() override;
 
     virtual void flushAndScale() override;
+    virtual void BindRenderFramebufferForRead() override;
     virtual void swapBuffers() override;
 
     virtual void beginOverlays() override;

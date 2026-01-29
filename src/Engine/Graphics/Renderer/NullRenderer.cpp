@@ -99,6 +99,7 @@ void NullRenderer::DoRenderBillboards_D3D() {
 void NullRenderer::beginOverlays() {}
 void NullRenderer::endOverlays() {}
 void NullRenderer::flushAndScale() {}
+void NullRenderer::BindRenderFramebufferForRead() {}
 void NullRenderer::swapBuffers() {
     openGLContext->swapBuffers();
 }

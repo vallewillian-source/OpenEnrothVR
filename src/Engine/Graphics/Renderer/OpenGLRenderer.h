@@ -92,6 +92,7 @@ class OpenGLRenderer : public BaseRenderer {
     virtual bool ReloadShaders() override;
 
     virtual void flushAndScale() override;
+    virtual void BindRenderFramebufferForRead() override;
     virtual void swapBuffers() override;
 
     virtual void beginOverlays() override;

@@ -218,6 +218,17 @@ void Engine::drawHUD() {
 //----- (0044103C) --------------------------------------------------------
 void Engine::Draw() {
     if (VRManager::Get().IsInitialized()) {
+        // 1. Initialize Overlay if needed (Lazy Init)
+        // Use standard 640x480 resolution for MM7 UI
+        VRManager::Get().InitOverlay(640, 480);
+
+        // 2. Render 2D UI to Texture
+        VRManager::Get().BeginOverlayRender();
+        // We need to call drawHUD to render the UI. 
+        // drawHUD sets up 2D mode internally.
+        drawHUD(); 
+        VRManager::Get().EndOverlayRender();
+
         if (VRManager::Get().BeginFrame()) {
             // Render VR Views
             for (int i = 0; i < 2; ++i) {
@@ -231,7 +242,9 @@ void Engine::Draw() {
                     VRManager::Get().SetIsRenderingVREye(true);
 
                     drawWorld();
-                    // drawHUD(); // Skip HUD for now in VR world space to avoid issues
+                    
+                    // Render the 2D Overlay in 3D space
+                    VRManager::Get().RenderOverlay3D();
 
                     VRManager::Get().SetIsRenderingVREye(false);
                     VRManager::Get().ReleaseSwapchainTexture(i);

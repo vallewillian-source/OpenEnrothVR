@@ -72,6 +72,18 @@ public:
     // Binds the framebuffer for the current swapchain image of the specified view
     void BindSwapchainFramebuffer(int viewIndex);
 
+    // Overlay / Virtual Screen methods
+    void InitOverlay(int width, int height);
+    void BeginOverlayRender();
+    void EndOverlayRender();
+    void CaptureScreenToOverlay(int srcWidth, int srcHeight);
+    void RenderOverlay3D();
+
+    // Overlay layer (OpenXR quad layer) methods
+    void InitOverlayLayer(int width, int height);
+    void CaptureScreenToOverlayLayer(int srcWidth, int srcHeight);
+    void SetOverlayLayerEnabled(bool enabled) { m_overlayLayerEnabled = enabled; }
+
 private:
     VRManager();
     ~VRManager();
@@ -80,11 +92,26 @@ private:
     bool GetSystem();
     bool CreateSwapchains();
     void DestroySwapchains();
+    
+    // Overlay resources
+    unsigned int m_overlayFBO = 0;
+    unsigned int m_overlayTexture = 0;
+    unsigned int m_overlayDepthBuffer = 0; // Might not need depth for 2D overlay, but good practice
+    int m_overlayWidth = 0;
+    int m_overlayHeight = 0;
+    
+    // Overlay Quad resources
+    unsigned int m_quadVAO = 0;
+    unsigned int m_quadVBO = 0;
+    unsigned int m_quadShader = 0;
+    void InitOverlayQuad();
+    void DrawOverlayQuad();
 
     XrInstance m_instance = XR_NULL_HANDLE;
     XrSystemId m_systemId = XR_NULL_SYSTEM_ID;
     XrSession m_session = XR_NULL_HANDLE;
     XrSpace m_appSpace = XR_NULL_HANDLE;
+    XrSpace m_viewSpace = XR_NULL_HANDLE;
     
     bool m_sessionRunning = false;
     XrSessionState m_sessionState = XR_SESSION_STATE_UNKNOWN;
@@ -100,6 +127,16 @@ private:
         std::vector<XrSwapchainImageOpenGLKHR> images;
     };
     std::vector<SwapchainInfo> m_swapchains;
+
+    // Overlay quad layer swapchain
+    XrSwapchain m_overlayLayerSwapchain = XR_NULL_HANDLE;
+    std::vector<XrSwapchainImageOpenGLKHR> m_overlayLayerImages;
+    uint32_t m_overlayLayerImageIndex = 0;
+    unsigned int m_overlayLayerFBO = 0;
+    int m_overlayLayerWidth = 0;
+    int m_overlayLayerHeight = 0;
+    bool m_overlayLayerEnabled = false;
+    bool m_overlayLayerHasFrame = false;
     
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};

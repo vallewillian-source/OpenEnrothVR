@@ -444,6 +444,8 @@ void Menu::EventLoop() {
     }
 }
 
+#include "Engine/VR/VRManager.h"
+
 void Menu::MenuLoop() {
     pEventTimer->setPaused(true);
     current_screen_type = SCREEN_MENU;
@@ -469,12 +471,36 @@ void Menu::MenuLoop() {
             current_screen_type == SCREEN_KEYBOARD_OPTIONS)) {
         MessageLoopWithWait();
 
+        // VR: Enable overlay layer while menu is open
+        if (VRManager::Get().IsInitialized()) {
+            VRManager::Get().SetOverlayLayerEnabled(true);
+        }
+
         GameUI_WritePointedObjectStatusString();
         render->BeginScene2D();
         engine->DrawGUI();
         GUI_UpdateWindows();
         engine->_statusBar->draw();
         mouse->DrawCursor();
+
+        // VR: Render Frame
+        if (VRManager::Get().IsInitialized() && VRManager::Get().BeginFrame()) {
+            render->flushAndScale();
+            render->BindRenderFramebufferForRead();
+            VRManager::Get().CaptureScreenToOverlayLayer(render->GetRenderDimensions().w, render->GetRenderDimensions().h);
+
+            for (int i = 0; i < 2; ++i) {
+                unsigned int textureId = VRManager::Get().AcquireSwapchainTexture(i);
+                if (textureId != 0) {
+                    VRManager::Get().BindSwapchainFramebuffer(i);
+                    render->ClearTarget(colorTable.Black);
+                    VRManager::Get().SetCurrentViewIndex(i);
+                    VRManager::Get().ReleaseSwapchainTexture(i);
+                }
+            }
+            VRManager::Get().EndFrame();
+        }
+
         render->Present();
 
         EventLoop();
@@ -483,6 +509,10 @@ void Menu::MenuLoop() {
     pGUIWindow_CurrentMenu->Release();
     // delete pGUIWindow_CurrentMenu;
     pGUIWindow_CurrentMenu = nullptr;
+
+    if (VRManager::Get().IsInitialized()) {
+        VRManager::Get().SetOverlayLayerEnabled(false);
+    }
 
     if (gamma_preview_image) {
         gamma_preview_image->release();

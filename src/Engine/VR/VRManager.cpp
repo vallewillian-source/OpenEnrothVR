@@ -183,6 +183,365 @@ bool VRManager::Initialize() {
     return true;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Overlay / Virtual Screen Implementation
+// ------------------------------------------------------------------------------------------------
+
+void VRManager::InitOverlay(int width, int height) {
+    if (m_overlayFBO != 0) return; // Already initialized
+
+    m_overlayWidth = width;
+    m_overlayHeight = height;
+
+    // Create FBO
+    glGenFramebuffers(1, &m_overlayFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_overlayFBO);
+
+    // Create Texture
+    glGenTextures(1, &m_overlayTexture);
+    glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_overlayTexture, 0);
+
+    // Create Depth/Stencil RBO (Optional, but good for safety if UI draws depth)
+    // glGenRenderbuffers(1, &m_overlayDepthBuffer);
+    // glBindRenderbuffer(GL_RENDERBUFFER, m_overlayDepthBuffer);
+    // glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    // glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_overlayDepthBuffer);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (logger) logger->error("VR Overlay Framebuffer is not complete!");
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    InitOverlayQuad();
+}
+
+void VRManager::BeginOverlayRender() {
+    if (m_overlayFBO == 0) return;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_overlayFBO);
+    glViewport(0, 0, m_overlayWidth, m_overlayHeight);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Transparent background
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void VRManager::EndOverlayRender() {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void VRManager::CaptureScreenToOverlay(int srcWidth, int srcHeight) {
+    if (m_overlayFBO == 0) return;
+
+    GLint oldReadFBO = 0, oldDrawFBO = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFBO);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDrawFBO);
+
+    // glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_overlayFBO);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+    glBlitFramebuffer(0, 0, srcWidth, srcHeight,
+                      0, 0, m_overlayWidth, m_overlayHeight,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, oldReadFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, oldDrawFBO);
+}
+
+void VRManager::InitOverlayLayer(int width, int height) {
+    if (m_session == XR_NULL_HANDLE) return;
+    if (m_overlayLayerSwapchain != XR_NULL_HANDLE && m_overlayLayerWidth == width && m_overlayLayerHeight == height) return;
+
+    if (m_overlayLayerSwapchain != XR_NULL_HANDLE) {
+        xrDestroySwapchain(m_overlayLayerSwapchain);
+        m_overlayLayerSwapchain = XR_NULL_HANDLE;
+        m_overlayLayerImages.clear();
+        m_overlayLayerHasFrame = false;
+    }
+
+    if (m_overlayLayerFBO != 0) {
+        glDeleteFramebuffers(1, &m_overlayLayerFBO);
+        m_overlayLayerFBO = 0;
+    }
+
+    XrSwapchainCreateInfo swapchainInfo = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+    swapchainInfo.arraySize = 1;
+    swapchainInfo.format = GL_RGBA8;
+    swapchainInfo.width = width;
+    swapchainInfo.height = height;
+    swapchainInfo.mipCount = 1;
+    swapchainInfo.faceCount = 1;
+    swapchainInfo.sampleCount = 1;
+    swapchainInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+
+    if (!xrCheck(m_instance, xrCreateSwapchain(m_session, &swapchainInfo, &m_overlayLayerSwapchain), "xrCreateSwapchain(overlayLayer)"))
+        return;
+
+    uint32_t imageCount = 0;
+    xrEnumerateSwapchainImages(m_overlayLayerSwapchain, 0, &imageCount, nullptr);
+    m_overlayLayerImages.resize(imageCount, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR});
+    xrEnumerateSwapchainImages(m_overlayLayerSwapchain, imageCount, &imageCount, (XrSwapchainImageBaseHeader*)m_overlayLayerImages.data());
+
+    glGenFramebuffers(1, &m_overlayLayerFBO);
+
+    m_overlayLayerWidth = width;
+    m_overlayLayerHeight = height;
+    m_overlayLayerHasFrame = false;
+}
+
+void VRManager::CaptureScreenToOverlayLayer(int srcWidth, int srcHeight) {
+    if (m_overlayLayerSwapchain == XR_NULL_HANDLE) {
+        InitOverlayLayer(srcWidth, srcHeight);
+    }
+    if (m_overlayLayerSwapchain == XR_NULL_HANDLE) return;
+
+    if (logger && std::getenv("OPENENROTH_VR_MENU_OVERLAY_LOG") != nullptr) {
+        logger->info("VR menu overlay layer capture: src {}x{}, dst {}x{}",
+                     srcWidth, srcHeight, m_overlayLayerWidth, m_overlayLayerHeight);
+    }
+
+    uint32_t imageIndex = 0;
+    XrSwapchainImageAcquireInfo acquireInfo = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    if (!xrCheck(m_instance, xrAcquireSwapchainImage(m_overlayLayerSwapchain, &acquireInfo, &imageIndex), "xrAcquireSwapchainImage(overlayLayer)"))
+        return;
+
+    XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    waitInfo.timeout = XR_INFINITE_DURATION;
+    if (!xrCheck(m_instance, xrWaitSwapchainImage(m_overlayLayerSwapchain, &waitInfo), "xrWaitSwapchainImage(overlayLayer)"))
+        return;
+
+    m_overlayLayerImageIndex = imageIndex;
+
+    GLint oldReadFBO = 0, oldDrawFBO = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFBO);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDrawFBO);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_overlayLayerFBO);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_overlayLayerImages[imageIndex].image, 0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+    GLenum fboStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+    if (fboStatus == GL_FRAMEBUFFER_COMPLETE) {
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, m_overlayLayerWidth, m_overlayLayerHeight);
+        glBlitFramebuffer(0, 0, srcWidth, srcHeight,
+                          0, 0, m_overlayLayerWidth, m_overlayLayerHeight,
+                          GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    } else if (logger) {
+        logger->error("VR overlay layer FBO incomplete: {}", static_cast<unsigned int>(fboStatus));
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, oldReadFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, oldDrawFBO);
+
+    XrSwapchainImageReleaseInfo releaseInfo = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xrCheck(m_instance, xrReleaseSwapchainImage(m_overlayLayerSwapchain, &releaseInfo), "xrReleaseSwapchainImage(overlayLayer)");
+
+    m_overlayLayerHasFrame = true;
+}
+
+// Simple Shader for Overlay
+static const char* overlayVertSrc = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+
+out vec2 TexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    TexCoord = aTexCoord;
+}
+)";
+
+static const char* overlayFragSrc = R"(
+#version 330 core
+out vec4 FragColor;
+in vec2 TexCoord;
+
+uniform sampler2D screenTexture;
+
+void main() {
+    vec4 col = texture(screenTexture, TexCoord);
+    // Simple alpha threshold if needed, or rely on blending
+    // if (col.a < 0.01) discard; 
+    FragColor = col;
+}
+)";
+
+void VRManager::InitOverlayQuad() {
+    // Quad vertices (centered at 0,0, facing Z?)
+    // 1.5m away means we place it at Z = -1.5 (in OpenXR space)
+    // But we will use Model matrix to position it.
+    // So let's define it at origin, 1x1 size (from -0.5 to 0.5)
+    
+    // X, Y, Z, U, V
+    float vertices[] = {
+        // positions          // texture coords
+         0.5f,  0.375f, 0.0f,   1.0f, 1.0f, // Top Right (4:3 Aspect Ratio approx)
+         0.5f, -0.375f, 0.0f,   1.0f, 0.0f, // Bottom Right
+        -0.5f, -0.375f, 0.0f,   0.0f, 0.0f, // Bottom Left
+        -0.5f,  0.375f, 0.0f,   0.0f, 1.0f  // Top Left 
+    };
+    // Aspect Ratio 4:3 -> 1.0 width, 0.75 height.
+
+    unsigned int indices[] = {
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
+    };
+
+    glGenVertexArrays(1, &m_quadVAO);
+    glGenBuffers(1, &m_quadVBO);
+    unsigned int EBO;
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(m_quadVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // Compile Shaders
+    unsigned int vertex, fragment;
+    int success;
+    char infoLog[512];
+
+    vertex = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex, 1, &overlayVertSrc, NULL);
+    glCompileShader(vertex);
+    // Check errors...
+    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+        if (logger) logger->error("VR Overlay Vertex Shader Compilation Failed: {}", infoLog);
+    }
+
+    fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, &overlayFragSrc, NULL);
+    glCompileShader(fragment);
+    // Check errors...
+    glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+        if (logger) logger->error("VR Overlay Fragment Shader Compilation Failed: {}", infoLog);
+    }
+
+    m_quadShader = glCreateProgram();
+    glAttachShader(m_quadShader, vertex);
+    glAttachShader(m_quadShader, fragment);
+    glLinkProgram(m_quadShader);
+    // Check errors...
+    glGetProgramiv(m_quadShader, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(m_quadShader, 512, NULL, infoLog);
+        if (logger) logger->error("VR Overlay Shader Linking Failed: {}", infoLog);
+    }
+
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+}
+
+void VRManager::RenderOverlay3D() {
+    if (m_quadShader == 0 || m_overlayTexture == 0) return;
+
+    // Use current view parameters
+    // In RenderOverlay3D, we are inside the VR Render Loop, so correct framebuffer is bound.
+    
+    // Set Viewport to match VR View Size
+    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+
+    // Get View and Projection from current VR View
+    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+    glm::mat4 projection = m_views[m_currentViewIndex].projectionMatrix;
+
+    // Calculate Model Matrix
+    // We want the screen to be 1.5m in front of the HMD's CURRENT position.
+    // Actually, if we do that, it will be "locked" to the face (HUD).
+    // The user said "Ao dar esc, devemos ver essa tela 2D na nossa frente".
+    // For MVP, Head-Locked is fine.
+    
+    // HMD View Matrix is World->View.
+    // Inverse View Matrix is View->World (Camera Transform).
+    glm::mat4 invView = glm::inverse(view);
+    
+    // Position: Camera Position + Camera Forward * 1.5m
+    // OpenXR Camera Forward is -Z (in View Space).
+    // So in World Space, it is invView * (0, 0, -1, 0).
+    
+    glm::vec3 camPos = glm::vec3(invView[3]);
+    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+    glm::vec3 quadPos = camPos + camFwd * 1.5f;
+
+    // Orientation: Face the camera.
+    // We can just use the Camera's Rotation.
+    // But we need to make sure the quad faces "back" to the camera.
+    // The quad is defined in XY plane facing +Z? No, usually +Z is normal.
+    // Wait, vertices are flat on Z=0. Normal is +Z.
+    // If we want it to face camera, we need it to look at camera.
+    // Or we can just take Camera Rotation and apply it.
+    // Camera looks down -Z. Quad needs to face +Z to be seen?
+    // If quad is at (0,0,-1.5) in view space, and faces +Z, it is visible.
+    
+    // Let's do it in View Space! It's easier.
+    // Model Matrix in View Space = Translation(0, 0, -1.5).
+    // Then we don't need 'view' matrix in shader?
+    // Wait, shader uses projection * view * model.
+    // If we define Model relative to World, we need full chain.
+    // If we define Model relative to View, we pass Identity as View, and (View * Model) as Model.
+    
+    // Let's stick to World Space logic for consistency.
+    // Model Matrix = Translation(quadPos) * Rotation(camRot).
+    // Rotation: we want the quad to have same orientation as camera.
+    // Camera looks -Z. Quad normal is +Z (defined above).
+    // So Quad is "facing away" from camera if we just copy rotation?
+    // No, if Quad is at Z=-1.5 (local), and faces +Z (local), it faces origin (camera).
+    // So yes, copying Camera Rotation is correct if Quad is defined to face +Z.
+    
+    // Construct Model Matrix from Camera Matrix (invView), but move position.
+    glm::mat4 model = invView;
+    model[3] = glm::vec4(quadPos, 1.0f); // Set translation to new position
+
+    // Render State Setup
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST); // Overlay should be on top? Or check depth?
+    // Usually HUD is on top.
+    
+    glUseProgram(m_quadShader);
+    
+    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &projection[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
+    glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+
+    glBindVertexArray(m_quadVAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    // Restore State
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+}
+
 bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
     if (m_instance == XR_NULL_HANDLE) return false;
     if (m_session != XR_NULL_HANDLE) return true;
@@ -227,6 +586,12 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
     spaceInfo.poseInReferenceSpace.orientation.w = 1.0f;
     
     if (!xrCheck(m_instance, xrCreateReferenceSpace(m_session, &spaceInfo, &m_appSpace), "xrCreateReferenceSpace"))
+        return false;
+
+    XrReferenceSpaceCreateInfo viewSpaceInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    viewSpaceInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+    viewSpaceInfo.poseInReferenceSpace.orientation.w = 1.0f;
+    if (!xrCheck(m_instance, xrCreateReferenceSpace(m_session, &viewSpaceInfo, &m_viewSpace), "xrCreateReferenceSpace(XR_REFERENCE_SPACE_TYPE_VIEW)"))
         return false;
 
     if (!CreateSwapchains()) return false;
@@ -417,13 +782,31 @@ void VRManager::EndFrame() {
     projectionLayer.viewCount = (uint32_t)m_projectionViews.size();
     projectionLayer.views = m_projectionViews.data();
 
-    const XrCompositionLayerBaseHeader* layers[] = { (const XrCompositionLayerBaseHeader*)&projectionLayer };
+    XrCompositionLayerQuad quadLayer = {XR_TYPE_COMPOSITION_LAYER_QUAD};
+    std::array<const XrCompositionLayerBaseHeader*, 2> layers = { (const XrCompositionLayerBaseHeader*)&projectionLayer, nullptr };
+    uint32_t layerCount = 1;
+    if (m_overlayLayerEnabled && m_overlayLayerHasFrame && m_overlayLayerSwapchain != XR_NULL_HANDLE && m_viewSpace != XR_NULL_HANDLE) {
+        quadLayer.layerFlags = 0;
+        quadLayer.space = m_viewSpace;
+        quadLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+        quadLayer.pose.orientation.w = 1.0f;
+        quadLayer.pose.position.x = 0.0f;
+        quadLayer.pose.position.y = 0.0f;
+        quadLayer.pose.position.z = -1.5f;
+        quadLayer.size.width = 1.0f;
+        quadLayer.size.height = 0.75f;
+        quadLayer.subImage.swapchain = m_overlayLayerSwapchain;
+        quadLayer.subImage.imageRect.offset = {0, 0};
+        quadLayer.subImage.imageRect.extent = {m_overlayLayerWidth, m_overlayLayerHeight};
+        quadLayer.subImage.imageArrayIndex = 0;
+        layers[layerCount++] = (const XrCompositionLayerBaseHeader*)&quadLayer;
+    }
 
     XrFrameEndInfo endInfo = {XR_TYPE_FRAME_END_INFO};
     endInfo.displayTime = m_frameState.predictedDisplayTime;
     endInfo.environmentBlendMode = m_environmentBlendMode;
-    endInfo.layerCount = 1;
-    endInfo.layers = layers;
+    endInfo.layerCount = layerCount;
+    endInfo.layers = layers.data();
 
     xrCheck(m_instance, xrEndFrame(m_session, &endInfo), "xrEndFrame");
 
@@ -501,6 +884,25 @@ void VRManager::ReleaseSwapchainTexture(int viewIndex) {
 }
 
 void VRManager::Shutdown() {
+    if (m_overlayLayerSwapchain != XR_NULL_HANDLE) {
+        xrDestroySwapchain(m_overlayLayerSwapchain);
+        m_overlayLayerSwapchain = XR_NULL_HANDLE;
+    }
+    m_overlayLayerImages.clear();
+    m_overlayLayerHasFrame = false;
+    if (m_overlayLayerFBO != 0) {
+        glDeleteFramebuffers(1, &m_overlayLayerFBO);
+        m_overlayLayerFBO = 0;
+    }
+
+    if (m_viewSpace != XR_NULL_HANDLE) {
+        xrDestroySpace(m_viewSpace);
+        m_viewSpace = XR_NULL_HANDLE;
+    }
+    if (m_appSpace != XR_NULL_HANDLE) {
+        xrDestroySpace(m_appSpace);
+        m_appSpace = XR_NULL_HANDLE;
+    }
     if (m_session != XR_NULL_HANDLE) {
         xrDestroySession(m_session);
         m_session = XR_NULL_HANDLE;
