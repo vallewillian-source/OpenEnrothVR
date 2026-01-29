@@ -86,6 +86,18 @@ public:
 
     bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed);
 
+    struct VRInputState {
+        glm::vec2 move = {0.0f, 0.0f};
+        glm::vec2 turn = {0.0f, 0.0f};
+        bool jump = false;
+        bool attack = false;
+        bool castReady = false;
+        bool interact = false;
+        bool yell = false;
+    };
+    
+    VRInputState GetVRInputState();
+
 private:
     VRManager();
     ~VRManager();
@@ -146,6 +158,17 @@ private:
     XrAction m_menuAimPoseAction = XR_NULL_HANDLE;
     XrAction m_menuSelectClickAction = XR_NULL_HANDLE;
     XrAction m_menuSelectValueAction = XR_NULL_HANDLE;
+    
+    // Gameplay Actions
+    XrActionSet m_gameplayActionSet = XR_NULL_HANDLE;
+    XrAction m_actionMove = XR_NULL_HANDLE;
+    XrAction m_actionTurn = XR_NULL_HANDLE;
+    XrAction m_actionAttack = XR_NULL_HANDLE;
+    XrAction m_actionCastReady = XR_NULL_HANDLE;
+    XrAction m_actionInteract = XR_NULL_HANDLE; // Trigger Right
+    XrAction m_actionYell = XR_NULL_HANDLE; // Trigger Left
+    // Jump is derived from Turn (Right Thumbstick Up)
+
     XrSpace m_menuAimSpaceRight = XR_NULL_HANDLE;
     XrPath m_handLeftPath = XR_NULL_PATH;
     XrPath m_handRightPath = XR_NULL_PATH;

@@ -689,11 +689,75 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
                     nullptr,
                     "/user/hand/right/input/trigger/value");
 
-            XrSessionActionSetsAttachInfo attachInfo = {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
-            attachInfo.countActionSets = 1;
-            attachInfo.actionSets = &m_menuActionSet;
-            xrCheck(m_instance, xrAttachSessionActionSets(m_session, &attachInfo), "xrAttachSessionActionSets(menu)");
+        }
 
+        // Gameplay Action Set
+        XrActionSetCreateInfo gameplaySetInfo = {XR_TYPE_ACTION_SET_CREATE_INFO};
+        std::strncpy(gameplaySetInfo.actionSetName, "gameplay", XR_MAX_ACTION_SET_NAME_SIZE - 1);
+        std::strncpy(gameplaySetInfo.localizedActionSetName, "Gameplay", XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE - 1);
+        gameplaySetInfo.priority = 0;
+        xrCheck(m_instance, xrCreateActionSet(m_instance, &gameplaySetInfo, &m_gameplayActionSet), "xrCreateActionSet(gameplay)");
+
+        if (m_gameplayActionSet != XR_NULL_HANDLE) {
+            auto createAction = [&](const char* name, const char* locName, XrActionType type, XrAction* action) {
+                XrActionCreateInfo info = {XR_TYPE_ACTION_CREATE_INFO};
+                info.actionType = type;
+                std::strncpy(info.actionName, name, XR_MAX_ACTION_NAME_SIZE - 1);
+                std::strncpy(info.localizedActionName, locName, XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+                xrCheck(m_instance, xrCreateAction(m_gameplayActionSet, &info, action), name);
+            };
+
+            createAction("move", "Move", XR_ACTION_TYPE_VECTOR2F_INPUT, &m_actionMove);
+            createAction("turn", "Turn", XR_ACTION_TYPE_VECTOR2F_INPUT, &m_actionTurn);
+            createAction("attack", "Attack", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionAttack);
+            createAction("cast_ready", "Cast Ready", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionCastReady);
+            createAction("interact", "Interact", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionInteract);
+            createAction("yell", "Yell", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionYell);
+            
+            // Bindings
+            auto suggest = [&](const char* profile, std::vector<std::pair<XrAction, const char*>> bindings) {
+                XrPath profilePath = XR_NULL_PATH;
+                if (XR_FAILED(xrStringToPath(m_instance, profile, &profilePath))) return;
+
+                std::vector<XrActionSuggestedBinding> suggestedBindings;
+                for (auto& b : bindings) {
+                    XrPath path = XR_NULL_PATH;
+                    if (XR_FAILED(xrStringToPath(m_instance, b.second, &path))) continue;
+                    suggestedBindings.push_back({b.first, path});
+                }
+
+                if (suggestedBindings.empty()) return;
+
+                XrInteractionProfileSuggestedBinding suggested = {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+                suggested.interactionProfile = profilePath;
+                suggested.suggestedBindings = suggestedBindings.data();
+                suggested.countSuggestedBindings = (uint32_t)suggestedBindings.size();
+                xrSuggestInteractionProfileBindings(m_instance, &suggested);
+            };
+
+            // Oculus Touch (Quest 3)
+            suggest("/interaction_profiles/oculus/touch_controller", {
+                {m_actionMove, "/user/hand/left/input/thumbstick"},
+                {m_actionTurn, "/user/hand/right/input/thumbstick"},
+                {m_actionAttack, "/user/hand/right/input/b/click"},
+                {m_actionCastReady, "/user/hand/right/input/a/click"},
+                {m_actionInteract, "/user/hand/right/input/trigger/value"}, // Using value as bool (threshold)
+                {m_actionYell, "/user/hand/left/input/trigger/value"}
+            });
+        }
+
+        std::vector<XrActionSet> actionSets;
+        if (m_menuActionSet != XR_NULL_HANDLE) actionSets.push_back(m_menuActionSet);
+        if (m_gameplayActionSet != XR_NULL_HANDLE) actionSets.push_back(m_gameplayActionSet);
+
+        if (!actionSets.empty()) {
+            XrSessionActionSetsAttachInfo attachInfo = {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+            attachInfo.countActionSets = (uint32_t)actionSets.size();
+            attachInfo.actionSets = actionSets.data();
+            xrCheck(m_instance, xrAttachSessionActionSets(m_session, &attachInfo), "xrAttachSessionActionSets");
+        }
+
+        if (m_menuActionSet != XR_NULL_HANDLE) {
             if (m_menuAimPoseAction != XR_NULL_HANDLE) {
                 XrActionSpaceCreateInfo spaceCreate = {XR_TYPE_ACTION_SPACE_CREATE_INFO};
                 spaceCreate.action = m_menuAimPoseAction;
@@ -812,14 +876,23 @@ bool VRManager::BeginFrame() {
         return false; // Just end frame later
     }
 
-    if (m_menuActionSet != XR_NULL_HANDLE) {
-        XrActiveActionSet activeSet = {};
-        activeSet.actionSet = m_menuActionSet;
-        activeSet.subactionPath = XR_NULL_PATH;
-        XrActionsSyncInfo syncInfo = {XR_TYPE_ACTIONS_SYNC_INFO};
-        syncInfo.countActiveActionSets = 1;
-        syncInfo.activeActionSets = &activeSet;
-        xrSyncActions(m_session, &syncInfo);
+    if (m_sessionState == XR_SESSION_STATE_FOCUSED) {
+        std::vector<XrActiveActionSet> activeSets;
+        if (m_menuActionSet != XR_NULL_HANDLE) {
+            XrActiveActionSet activeSet = {m_menuActionSet, XR_NULL_PATH};
+            activeSets.push_back(activeSet);
+        }
+        if (m_gameplayActionSet != XR_NULL_HANDLE) {
+            XrActiveActionSet activeSet = {m_gameplayActionSet, XR_NULL_PATH};
+            activeSets.push_back(activeSet);
+        }
+
+        if (!activeSets.empty()) {
+            XrActionsSyncInfo syncInfo = {XR_TYPE_ACTIONS_SYNC_INFO};
+            syncInfo.countActiveActionSets = (uint32_t)activeSets.size();
+            syncInfo.activeActionSets = activeSets.data();
+            xrSyncActions(m_session, &syncInfo);
+        }
     }
 
     if (!m_savedScissorStateValid) {
@@ -1246,4 +1319,48 @@ void VRManager::GetViewSize(int viewIndex, int& w, int& h) const {
     } else {
         w = 0; h = 0;
     }
+}
+
+VRManager::VRInputState VRManager::GetVRInputState() {
+    VRInputState state;
+    if (m_session == XR_NULL_HANDLE || m_sessionState != XR_SESSION_STATE_FOCUSED) return state;
+
+    auto getActionBool = [&](XrAction action) {
+        if (action == XR_NULL_HANDLE) return false;
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = action;
+        XrActionStateBoolean boolState = {XR_TYPE_ACTION_STATE_BOOLEAN};
+        if (XR_FAILED(xrGetActionStateBoolean(m_session, &getInfo, &boolState))) return false;
+        return (bool)boolState.currentState;
+    };
+
+    auto getActionVec2 = [&](XrAction action) {
+        if (action == XR_NULL_HANDLE) return glm::vec2(0.0f);
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = action;
+        XrActionStateVector2f vec2State = {XR_TYPE_ACTION_STATE_VECTOR2F};
+        if (XR_FAILED(xrGetActionStateVector2f(m_session, &getInfo, &vec2State))) return glm::vec2(0.0f);
+        return glm::vec2(vec2State.currentState.x, vec2State.currentState.y);
+    };
+    
+    auto getActionFloatAsBool = [&](XrAction action, float threshold = 0.5f) {
+        if (action == XR_NULL_HANDLE) return false;
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = action;
+        XrActionStateFloat floatState = {XR_TYPE_ACTION_STATE_FLOAT};
+        if (XR_FAILED(xrGetActionStateFloat(m_session, &getInfo, &floatState))) return false;
+        return floatState.currentState > threshold;
+    };
+
+    state.move = getActionVec2(m_actionMove);
+    state.turn = getActionVec2(m_actionTurn);
+    state.attack = getActionBool(m_actionAttack);
+    state.castReady = getActionBool(m_actionCastReady);
+    state.interact = getActionFloatAsBool(m_actionInteract, 0.5f);
+    state.yell = getActionFloatAsBool(m_actionYell, 0.5f);
+    
+    // Jump: Right Stick Up (Turn Y > 0.5)
+    state.jump = state.turn.y > 0.5f;
+
+    return state;
 }

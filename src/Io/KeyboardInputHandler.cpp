@@ -16,6 +16,8 @@
 #include "GUI/GUIWindow.h"
 #include "GUI/GUIMessageQueue.h"
 
+#include "Engine/VR/VRManager.h"
+
 #include "InputEnumFunctions.h"
 
 // Delayed keyrepeat registers after 500ms.
@@ -105,6 +107,34 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
     } else {
         if (this->keydelaytimer < DELAY_TOGGLE_TIME_FIRST)
             this->keydelaytimer += pEventTimer->dt();
+    }
+
+    // VR Input
+    if (VRManager::Get().IsInitialized() && VRManager::Get().IsSessionRunning()) {
+        auto vrInput = VRManager::Get().GetVRInputState();
+        
+        auto processAction = [&](InputAction action) {
+            if (isPaused) ProcessPausedAction(action);
+            else ProcessGameplayAction(action);
+        };
+
+        if (!isPaused) {
+            if (vrInput.move.y > 0.5f) ProcessGameplayAction(INPUT_ACTION_MOVE_FORWARD);
+            if (vrInput.move.y < -0.5f) ProcessGameplayAction(INPUT_ACTION_MOVE_BACKWARDS);
+            
+            if (vrInput.turn.x < -0.5f) ProcessGameplayAction(INPUT_ACTION_TURN_LEFT);
+            if (vrInput.turn.x > 0.5f) ProcessGameplayAction(INPUT_ACTION_TURN_RIGHT);
+
+            if (vrInput.attack) ProcessGameplayAction(INPUT_ACTION_ATTACK);
+            // "Cast Ready" mapped to Quick Cast
+            if (vrInput.castReady) ProcessGameplayAction(INPUT_ACTION_QUICK_CAST);
+            if (vrInput.jump) ProcessGameplayAction(INPUT_ACTION_JUMP);
+            if (vrInput.yell) ProcessGameplayAction(INPUT_ACTION_YELL);
+        }
+        
+        if (vrInput.interact) {
+            processAction(INPUT_ACTION_INTERACT);
+        }
     }
 }
 
