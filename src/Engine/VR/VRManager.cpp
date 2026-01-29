@@ -1118,6 +1118,16 @@ void VRManager::Shutdown() {
         m_menuSelectClickAction = XR_NULL_HANDLE;
         m_menuSelectValueAction = XR_NULL_HANDLE;
     }
+    if (m_gameplayActionSet != XR_NULL_HANDLE) {
+        xrDestroyActionSet(m_gameplayActionSet);
+        m_gameplayActionSet = XR_NULL_HANDLE;
+        m_actionMove = XR_NULL_HANDLE;
+        m_actionTurn = XR_NULL_HANDLE;
+        m_actionAttack = XR_NULL_HANDLE;
+        m_actionCastReady = XR_NULL_HANDLE;
+        m_actionInteract = XR_NULL_HANDLE;
+        m_actionYell = XR_NULL_HANDLE;
+    }
 
     if (m_overlayLayerSwapchain != XR_NULL_HANDLE) {
         xrDestroySwapchain(m_overlayLayerSwapchain);
