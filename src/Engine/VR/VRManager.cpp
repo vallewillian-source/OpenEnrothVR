@@ -128,6 +128,7 @@ void VRManager::SetOverlayLayerEnabled(bool enabled) {
     m_overlayLayerHasFrame = false;
     m_overlayLayerAnchorPoseValid = false;
     m_menuSelectPressedPrev = false;
+    m_menuCursorInitialized = false; // Reset cursor initialization so it re-centers next time
 }
 
 bool VRManager::Initialize() {
@@ -606,91 +607,13 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
         xrStringToPath(m_instance, "/user/hand/left", &m_handLeftPath);
         xrStringToPath(m_instance, "/user/hand/right", &m_handRightPath);
 
-        XrActionSetCreateInfo actionSetInfo = {XR_TYPE_ACTION_SET_CREATE_INFO};
-        std::strncpy(actionSetInfo.actionSetName, "menu", XR_MAX_ACTION_SET_NAME_SIZE - 1);
-        std::strncpy(actionSetInfo.localizedActionSetName, "Menu", XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE - 1);
-        actionSetInfo.priority = 0;
-        xrCheck(m_instance, xrCreateActionSet(m_instance, &actionSetInfo, &m_menuActionSet), "xrCreateActionSet(menu)");
-
-        if (m_menuActionSet != XR_NULL_HANDLE) {
-            XrActionCreateInfo aimInfo = {XR_TYPE_ACTION_CREATE_INFO};
-            aimInfo.actionType = XR_ACTION_TYPE_POSE_INPUT;
-            std::strncpy(aimInfo.actionName, "menu_aim_pose", XR_MAX_ACTION_NAME_SIZE - 1);
-            std::strncpy(aimInfo.localizedActionName, "Menu Aim Pose", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-            aimInfo.countSubactionPaths = 1;
-            aimInfo.subactionPaths = &m_handRightPath;
-            xrCheck(m_instance, xrCreateAction(m_menuActionSet, &aimInfo, &m_menuAimPoseAction), "xrCreateAction(menu aim pose)");
-
-            XrActionCreateInfo clickInfo = {XR_TYPE_ACTION_CREATE_INFO};
-            clickInfo.actionType = XR_ACTION_TYPE_BOOLEAN_INPUT;
-            std::strncpy(clickInfo.actionName, "menu_select_click", XR_MAX_ACTION_NAME_SIZE - 1);
-            std::strncpy(clickInfo.localizedActionName, "Menu Select Click", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-            clickInfo.countSubactionPaths = 1;
-            clickInfo.subactionPaths = &m_handRightPath;
-            xrCheck(m_instance, xrCreateAction(m_menuActionSet, &clickInfo, &m_menuSelectClickAction), "xrCreateAction(menu select click)");
-
-            XrActionCreateInfo valueInfo = {XR_TYPE_ACTION_CREATE_INFO};
-            valueInfo.actionType = XR_ACTION_TYPE_FLOAT_INPUT;
-            std::strncpy(valueInfo.actionName, "menu_select_value", XR_MAX_ACTION_NAME_SIZE - 1);
-            std::strncpy(valueInfo.localizedActionName, "Menu Select Value", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-            valueInfo.countSubactionPaths = 1;
-            valueInfo.subactionPaths = &m_handRightPath;
-            xrCheck(m_instance, xrCreateAction(m_menuActionSet, &valueInfo, &m_menuSelectValueAction), "xrCreateAction(menu select value)");
-
-            auto suggest = [&](const char* interactionProfile,
-                               const char* aimPosePath,
-                               const char* clickPath,
-                               const char* valuePath) {
-                XrPath profilePath = XR_NULL_PATH;
-                if (XR_FAILED(xrStringToPath(m_instance, interactionProfile, &profilePath)))
-                    return;
-
-                std::vector<XrActionSuggestedBinding> bindings;
-                auto addBinding = [&](XrAction action, const char* pathStr) {
-                    if (action == XR_NULL_HANDLE || pathStr == nullptr) return;
-                    XrPath path = XR_NULL_PATH;
-                    if (XR_FAILED(xrStringToPath(m_instance, pathStr, &path)))
-                        return;
-                    bindings.push_back({action, path});
-                };
-
-                addBinding(m_menuAimPoseAction, aimPosePath);
-                addBinding(m_menuSelectClickAction, clickPath);
-                addBinding(m_menuSelectValueAction, valuePath);
-
-                if (bindings.empty())
-                    return;
-
-                XrInteractionProfileSuggestedBinding suggested = {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-                suggested.interactionProfile = profilePath;
-                suggested.suggestedBindings = bindings.data();
-                suggested.countSuggestedBindings = (uint32_t)bindings.size();
-                xrSuggestInteractionProfileBindings(m_instance, &suggested);
-            };
-
-            suggest("/interaction_profiles/khr/simple_controller",
-                    "/user/hand/right/input/aim/pose",
-                    "/user/hand/right/input/select/click",
-                    nullptr);
-            suggest("/interaction_profiles/oculus/touch_controller",
-                    "/user/hand/right/input/aim/pose",
-                    nullptr,
-                    "/user/hand/right/input/trigger/value");
-            suggest("/interaction_profiles/valve/index_controller",
-                    "/user/hand/right/input/aim/pose",
-                    nullptr,
-                    "/user/hand/right/input/trigger/value");
-            suggest("/interaction_profiles/htc/vive_controller",
-                    "/user/hand/right/input/aim/pose",
-                    nullptr,
-                    "/user/hand/right/input/trigger/value");
-            suggest("/interaction_profiles/microsoft/motion_controller",
-                    "/user/hand/right/input/aim/pose",
-                    nullptr,
-                    "/user/hand/right/input/trigger/value");
-
-        }
-
+        // We can keep the menu action set if we want to add specific menu actions later,
+        // but for now we will rely on gameplay actions (move/trigger) even in menu.
+        // Or we can remove it entirely if unused. 
+        // Let's keep it but empty for future use, or just remove the creation if it has no actions.
+        
+        // Actually, let's just skip creating m_menuActionSet actions since we removed them.
+        
         // Gameplay Action Set
         XrActionSetCreateInfo gameplaySetInfo = {XR_TYPE_ACTION_SET_CREATE_INFO};
         std::strncpy(gameplaySetInfo.actionSetName, "gameplay", XR_MAX_ACTION_SET_NAME_SIZE - 1);
@@ -770,13 +693,7 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
         }
 
         if (m_menuActionSet != XR_NULL_HANDLE) {
-            if (m_menuAimPoseAction != XR_NULL_HANDLE) {
-                XrActionSpaceCreateInfo spaceCreate = {XR_TYPE_ACTION_SPACE_CREATE_INFO};
-                spaceCreate.action = m_menuAimPoseAction;
-                spaceCreate.subactionPath = m_handRightPath;
-                spaceCreate.poseInActionSpace.orientation.w = 1.0f;
-                xrCheck(m_instance, xrCreateActionSpace(m_session, &spaceCreate, &m_menuAimSpaceRight), "xrCreateActionSpace(menu aim right)");
-            }
+            // No action spaces to create for menu currently
         }
     }
 
@@ -888,12 +805,17 @@ bool VRManager::BeginFrame() {
         return false; // Just end frame later
     }
 
-    if (m_sessionState == XR_SESSION_STATE_FOCUSED) {
+    if (m_sessionState == XR_SESSION_STATE_FOCUSED || m_sessionState == XR_SESSION_STATE_VISIBLE) {
         std::vector<XrActiveActionSet> activeSets;
+        
+        // We removed the menu action set for now, relying on gameplay actions.
+        /*
         if (m_menuActionSet != XR_NULL_HANDLE) {
             XrActiveActionSet activeSet = {m_menuActionSet, XR_NULL_PATH};
             activeSets.push_back(activeSet);
         }
+        */
+        
         if (m_gameplayActionSet != XR_NULL_HANDLE) {
             XrActiveActionSet activeSet = {m_gameplayActionSet, XR_NULL_PATH};
             activeSets.push_back(activeSet);
@@ -1119,6 +1041,7 @@ void VRManager::ReleaseSwapchainTexture(int viewIndex) {
 }
 
 void VRManager::Shutdown() {
+    /*
     if (m_menuAimSpaceRight != XR_NULL_HANDLE) {
         xrDestroySpace(m_menuAimSpaceRight);
         m_menuAimSpaceRight = XR_NULL_HANDLE;
@@ -1130,6 +1053,8 @@ void VRManager::Shutdown() {
         m_menuSelectClickAction = XR_NULL_HANDLE;
         m_menuSelectValueAction = XR_NULL_HANDLE;
     }
+    */
+
     if (m_gameplayActionSet != XR_NULL_HANDLE) {
         xrDestroyActionSet(m_gameplayActionSet);
         m_gameplayActionSet = XR_NULL_HANDLE;
@@ -1182,92 +1107,94 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     outY = 0;
     outClickPressed = false;
 
-    if (!m_overlayLayerEnabled || !m_overlayLayerHasFrame || !m_overlayLayerAnchorPoseValid)
+    if (!m_overlayLayerEnabled || !m_overlayLayerHasFrame) {
         return false;
+    }
     if (m_session == XR_NULL_HANDLE || !m_sessionRunning)
+    {
         return false;
-    if (m_appSpace == XR_NULL_HANDLE || m_menuAimSpaceRight == XR_NULL_HANDLE)
+    }
+    // m_menuAimSpaceRight is removed
+    /*
+    if (m_menuAimSpaceRight == XR_NULL_HANDLE)
+    {
         return false;
+    }
+    */
     if (menuWidth <= 0 || menuHeight <= 0)
+    {
         return false;
-
-    XrActionStateBoolean clickState = {XR_TYPE_ACTION_STATE_BOOLEAN};
-    if (m_menuSelectClickAction != XR_NULL_HANDLE) {
-        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
-        getInfo.action = m_menuSelectClickAction;
-        xrGetActionStateBoolean(m_session, &getInfo, &clickState);
     }
 
-    XrActionStateFloat valueState = {XR_TYPE_ACTION_STATE_FLOAT};
-    if (m_menuSelectValueAction != XR_NULL_HANDLE) {
-        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
-        getInfo.action = m_menuSelectValueAction;
-        xrGetActionStateFloat(m_session, &getInfo, &valueState);
+    // Initialize cursor to center if first time
+    if (!m_menuCursorInitialized) {
+        m_menuCursorX = (float)menuWidth * 0.5f;
+        m_menuCursorY = (float)menuHeight * 0.5f;
+        m_menuCursorInitialized = true;
     }
 
-    bool pressedNow = (clickState.isActive && clickState.currentState) ||
-                      (valueState.isActive && valueState.currentState > 0.7f);
+    if (m_sessionState == XR_SESSION_STATE_FOCUSED || m_sessionState == XR_SESSION_STATE_VISIBLE) {
+        if (m_gameplayActionSet != XR_NULL_HANDLE) {
+            XrActiveActionSet activeSet = {m_gameplayActionSet, XR_NULL_PATH};
+            XrActionsSyncInfo syncInfo = {XR_TYPE_ACTIONS_SYNC_INFO};
+            syncInfo.countActiveActionSets = 1;
+            syncInfo.activeActionSets = &activeSet;
+            xrSyncActions(m_session, &syncInfo);
+        }
+    }
+
+    // Get input from Left Stick (m_actionMove) and Left/Right Triggers (m_actionEsc/m_actionInteract)
+    XrActionStateVector2f moveState = {XR_TYPE_ACTION_STATE_VECTOR2F};
+    if (m_actionMove != XR_NULL_HANDLE) {
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = m_actionMove;
+        getInfo.subactionPath = XR_NULL_PATH;
+        xrGetActionStateVector2f(m_session, &getInfo, &moveState);
+    }
+
+    XrActionStateFloat triggerLeftState = {XR_TYPE_ACTION_STATE_FLOAT};
+    if (m_actionEsc != XR_NULL_HANDLE) {
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = m_actionEsc;
+        getInfo.subactionPath = XR_NULL_PATH;
+        xrGetActionStateFloat(m_session, &getInfo, &triggerLeftState);
+    }
+
+    XrActionStateFloat triggerRightState = {XR_TYPE_ACTION_STATE_FLOAT};
+    if (m_actionInteract != XR_NULL_HANDLE) {
+        XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+        getInfo.action = m_actionInteract;
+        getInfo.subactionPath = XR_NULL_PATH;
+        xrGetActionStateFloat(m_session, &getInfo, &triggerRightState);
+    }
+
+    // Update Cursor Position
+    if (moveState.isActive) {
+        // Move X
+        m_menuCursorX += moveState.currentState.x * m_menuCursorSpeed;
+        
+        // Move Y (Invert Stick Y because screen Y is down)
+        m_menuCursorY -= moveState.currentState.y * m_menuCursorSpeed;
+
+        // Clamp
+        m_menuCursorX = std::clamp(m_menuCursorX, 0.0f, (float)menuWidth - 1.0f);
+        m_menuCursorY = std::clamp(m_menuCursorY, 0.0f, (float)menuHeight - 1.0f);
+    }
+
+    // Update Click State
+    // Threshold for trigger
+    bool pressedNow = false;
+    if ((triggerLeftState.isActive && triggerLeftState.currentState > 0.5f) || 
+        (triggerRightState.isActive && triggerRightState.currentState > 0.5f)) {
+        pressedNow = true;
+    }
+
     outClickPressed = pressedNow && !m_menuSelectPressedPrev;
     m_menuSelectPressedPrev = pressedNow;
 
-    XrSpaceLocation loc = {XR_TYPE_SPACE_LOCATION};
-    if (XR_FAILED(xrLocateSpace(m_menuAimSpaceRight, m_appSpace, m_frameState.predictedDisplayTime, &loc)))
-        return false;
-    if ((loc.locationFlags & (XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) !=
-        (XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
-        return false;
-
-    glm::vec3 rayOrigin(loc.pose.position.x, loc.pose.position.y, loc.pose.position.z);
-    glm::quat rayOri(loc.pose.orientation.w, loc.pose.orientation.x, loc.pose.orientation.y, loc.pose.orientation.z);
-    glm::vec3 rayDir = glm::normalize(rayOri * glm::vec3(0.0f, 0.0f, -1.0f));
-
-    glm::vec3 quadPos(m_overlayLayerAnchorPose.position.x, m_overlayLayerAnchorPose.position.y, m_overlayLayerAnchorPose.position.z);
-    glm::quat quadOri(m_overlayLayerAnchorPose.orientation.w,
-                      m_overlayLayerAnchorPose.orientation.x,
-                      m_overlayLayerAnchorPose.orientation.y,
-                      m_overlayLayerAnchorPose.orientation.z);
-    glm::vec3 quadNormal = glm::normalize(quadOri * glm::vec3(0.0f, 0.0f, 1.0f));
-
-    float denom = glm::dot(rayDir, quadNormal);
-    if (std::abs(denom) < 1e-5f) {
-        quadNormal = -quadNormal;
-        denom = glm::dot(rayDir, quadNormal);
-        if (std::abs(denom) < 1e-5f)
-            return false;
-    }
-
-    float t = glm::dot(quadPos - rayOrigin, quadNormal) / denom;
-    if (t <= 0.0f) {
-        quadNormal = -quadNormal;
-        denom = glm::dot(rayDir, quadNormal);
-        if (std::abs(denom) < 1e-5f)
-            return false;
-        t = glm::dot(quadPos - rayOrigin, quadNormal) / denom;
-        if (t <= 0.0f)
-            return false;
-    }
-
-    glm::vec3 hit = rayOrigin + rayDir * t;
-    glm::vec3 local = glm::inverse(quadOri) * (hit - quadPos);
-
-    const float quadWidth = 1.0f;
-    const float quadHeight = 0.75f;
-    const float halfW = quadWidth * 0.5f;
-    const float halfH = quadHeight * 0.5f;
-
-    if (local.x < -halfW || local.x > halfW || local.y < -halfH || local.y > halfH)
-        return false;
-
-    float u = (local.x + halfW) / (2.0f * halfW);
-    float v = (halfH - local.y) / (2.0f * halfH);
-
-    int px = (int)std::round(u * (float)(menuWidth - 1));
-    int py = (int)std::round(v * (float)(menuHeight - 1));
-    px = std::clamp(px, 0, menuWidth - 1);
-    py = std::clamp(py, 0, menuHeight - 1);
-
-    outX = px;
-    outY = py;
+    outX = (int)m_menuCursorX;
+    outY = (int)m_menuCursorY;
+    
     return true;
 }
 
@@ -1351,7 +1278,15 @@ void VRManager::GetViewSize(int viewIndex, int& w, int& h) const {
 
 VRManager::VRInputState VRManager::GetVRInputState() {
     VRInputState state;
-    if (m_session == XR_NULL_HANDLE || m_sessionState != XR_SESSION_STATE_FOCUSED) return state;
+    if (m_session == XR_NULL_HANDLE || (m_sessionState != XR_SESSION_STATE_FOCUSED && m_sessionState != XR_SESSION_STATE_VISIBLE)) return state;
+
+    if (m_gameplayActionSet != XR_NULL_HANDLE) {
+        XrActiveActionSet activeSet = {m_gameplayActionSet, XR_NULL_PATH};
+        XrActionsSyncInfo syncInfo = {XR_TYPE_ACTIONS_SYNC_INFO};
+        syncInfo.countActiveActionSets = 1;
+        syncInfo.activeActionSets = &activeSet;
+        xrSyncActions(m_session, &syncInfo);
+    }
 
     auto getActionBool = [&](XrAction action) {
         if (action == XR_NULL_HANDLE) return false;
@@ -1359,7 +1294,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateBoolean boolState = {XR_TYPE_ACTION_STATE_BOOLEAN};
         if (XR_FAILED(xrGetActionStateBoolean(m_session, &getInfo, &boolState))) return false;
-        return (bool)boolState.currentState;
+        return boolState.isActive && (bool)boolState.currentState;
     };
 
     auto getActionVec2 = [&](XrAction action) {
@@ -1368,6 +1303,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateVector2f vec2State = {XR_TYPE_ACTION_STATE_VECTOR2F};
         if (XR_FAILED(xrGetActionStateVector2f(m_session, &getInfo, &vec2State))) return glm::vec2(0.0f);
+        if (!vec2State.isActive) return glm::vec2(0.0f);
         return glm::vec2(vec2State.currentState.x, vec2State.currentState.y);
     };
     
@@ -1377,16 +1313,20 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateFloat floatState = {XR_TYPE_ACTION_STATE_FLOAT};
         if (XR_FAILED(xrGetActionStateFloat(m_session, &getInfo, &floatState))) return false;
-        return floatState.currentState > threshold;
+        return floatState.isActive && floatState.currentState > threshold;
     };
 
-    state.move = getActionVec2(m_actionMove);
-    state.turn = getActionVec2(m_actionTurn);
+    glm::vec2 move = getActionVec2(m_actionMove);
+    state.moveX = move.x;
+    state.moveY = move.y;
+    glm::vec2 turn = getActionVec2(m_actionTurn);
+    state.turnX = turn.x;
+    state.turnY = turn.y;
     state.attack = getActionBool(m_actionAttack);
     state.castReady = getActionBool(m_actionCastReady);
     state.interact = getActionFloatAsBool(m_actionInteract, 0.5f);
-    state.esc = getActionFloatAsBool(m_actionEsc, 0.5f);
-    state.combat = getActionBool(m_actionCombat);
+    state.esc = getActionBool(m_actionCombat);
+    state.combat = false;
     state.cast = getActionBool(m_actionCast);
     state.flyUp = getActionFloatAsBool(m_actionFlyUp, 0.5f);
     state.flyDown = getActionFloatAsBool(m_actionFlyDown, 0.5f);
@@ -1394,7 +1334,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
     state.pass = getActionBool(m_actionPass);
     
     // Jump: Right Stick Up (Turn Y > 0.5)
-    state.jump = state.turn.y > 0.5f;
+    state.jump = state.turnY > 0.5f;
 
     return state;
 }

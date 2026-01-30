@@ -18,9 +18,11 @@
 #include <string>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include "VRInputState.h"
 
 class VRManager {
 public:
+    using VRInputState = ::VRInputState;
     static VRManager& Get();
 
     // Inicializa OpenXR Instance e System
@@ -86,22 +88,6 @@ public:
 
     bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed);
 
-    struct VRInputState {
-        glm::vec2 move = {0.0f, 0.0f};
-        glm::vec2 turn = {0.0f, 0.0f};
-        bool jump = false;
-        bool attack = false;
-        bool castReady = false;
-        bool interact = false;
-        bool esc = false;
-        bool combat = false;
-        bool cast = false;
-        bool flyUp = false;
-        bool flyDown = false;
-        bool quest = false;
-        bool pass = false;
-    };
-    
     VRInputState GetVRInputState();
 
 private:
@@ -161,9 +147,7 @@ private:
     XrPosef m_overlayLayerAnchorPose = {};
 
     XrActionSet m_menuActionSet = XR_NULL_HANDLE;
-    XrAction m_menuAimPoseAction = XR_NULL_HANDLE;
-    XrAction m_menuSelectClickAction = XR_NULL_HANDLE;
-    XrAction m_menuSelectValueAction = XR_NULL_HANDLE;
+    // Removed old raycasting actions
     
     // Gameplay Actions
     XrActionSet m_gameplayActionSet = XR_NULL_HANDLE;
@@ -181,9 +165,14 @@ private:
     XrAction m_actionPass = XR_NULL_HANDLE; // Right Stick Click
     // Jump is derived from Turn (Right Thumbstick Up)
 
-    XrSpace m_menuAimSpaceRight = XR_NULL_HANDLE;
     XrPath m_handLeftPath = XR_NULL_PATH;
     XrPath m_handRightPath = XR_NULL_PATH;
+    
+    // New Menu Cursor State
+    float m_menuCursorX = 0.0f;
+    float m_menuCursorY = 0.0f;
+    float m_menuCursorSpeed = 4.0f; // Pixels per frame factor (adjust as needed)
+    bool m_menuCursorInitialized = false;
     bool m_menuSelectPressedPrev = false;
     
     // Frame State

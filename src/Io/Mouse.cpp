@@ -98,6 +98,50 @@ void Io::Mouse::Initialize() {
 }
 
 void Io::Mouse::DrawCursor() {
+    if (VRManager::Get().IsInitialized()) {
+        const auto dims = render->GetRenderDimensions();
+        int vrX = 0, vrY = 0;
+        bool vrClick = false;
+        
+        // Check if we are in VR Menu Mode
+        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrClick)) {
+             // Update Mouse Position for Game Logic
+             this->setPosition(Pointi(vrX, vrY));
+             
+             // Handle Click
+             if (vrClick) {
+                 this->UI_OnMouseLeftClick();
+             }
+
+             // Hide OS cursor
+             platform->setCursorShown(false);
+
+             // Draw a "circle" using 2 rectangles (approximating 6x6 circle)
+             // Vertical-ish rect (4x6)
+             Recti r1;
+             r1.w = 4;
+             r1.h = 6;
+             r1.x = vrX - r1.w / 2;
+             r1.y = vrY - r1.h / 2;
+             render->FillRect(r1, colorTable.Blue);
+
+             // Horizontal-ish rect (6x4)
+             Recti r2;
+             r2.w = 6;
+             r2.h = 4;
+             r2.x = vrX - r2.w / 2;
+             r2.y = vrY - r2.h / 2;
+             render->FillRect(r2, colorTable.Blue);
+             
+             // Draw Picked Item if any (on top of cursor)
+             if (pParty->pPickedItem.itemId != ITEM_NULL) {
+                DrawPickedItem();
+             }
+             
+             return; // Skip standard cursor logic
+        }
+    }
+
     // get mouse pos
     Pointi pos = this->position();
 
@@ -123,68 +167,6 @@ void Io::Mouse::DrawCursor() {
             platform->setCursorShown(true);
         }
     }
-
-    if (VRManager::Get().IsInitialized()) {
-        const auto dims = render->GetRenderDimensions();
-        int vrX = 0, vrY = 0;
-        bool vrClick = false;
-        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrClick)) {
-             Recti r;
-             r.w = 6;
-             r.h = 6;
-             r.x = vrX - r.w / 2;
-             r.y = vrY - r.h / 2;
-             render->FillRect(r, colorTable.Blue);
-        }
-    }
-
-    /*
-      if (this->bInitialized) {
-        if (!this->field_8 && this->bActive && !this->_arrowCursor) //Uninitialized
-    memory access(this->field_8) pMouse->_469AE4();  // Ritor1: странная,
-    непонятная функция this->field_F4 = 1; if (this->_arrowCursor) { this->field_F4 =
-    0; return;
-        }
-
-        if (this->uMouseX < 0 || this->uMouseY < 0 ||
-    this->uMouseX > window->GetWidth() - 1 || this->uMouseY >
-    window->GetHeight() - 1) { this->field_F4 = 0; return;
-        }
-
-        this->pCursorBitmapRect_x = this->uMouseX;
-        this->pCursorBitmapRect_w = this->uMouseY + this->field_5C[0];
-    //Ritor1: Maybe this->field_5C[0] - cursor width this->pCursorBitmapRect_y =
-    this->uMouseY; this->pCursorBitmapRect_z = this->uMouseX +
-    this->uCursorBitmapPitch; //Ritor1: Maybe this->uCursorBitmapPitch - cursor
-    height if (this->uMouseX < 0) this->pCursorBitmapRect_x = 0; if
-    (this->uMouseY < 0) this->pCursorBitmapRect_y = 0; if
-    (this->pCursorBitmapRect_z > window->GetWidth()) this->pCursorBitmapRect_z =
-    window->GetWidth(); if (this->pCursorBitmapRect_w > window->GetHeight())
-          this->pCursorBitmapRect_w = window->GetHeight();
-        this->bActive = false;
-        this->uCursorBitmapWidth = this->pCursorBitmapRect_z -
-    this->pCursorBitmapRect_x; this->uCursorBitmapHeight =
-    this->pCursorBitmapRect_w - this->pCursorBitmapRect_y; if (this->bRedraw) {
-          unsigned int v9 = 0;
-          if (pMouse->ptr_90) {
-            v9 = 2 * pMouse->uCursorBitmapPitch;
-          }
-
-          Vec2i point;
-          point.x = pCursorBitmapPos.x;
-          point.y = pCursorBitmapPos.y;
-
-          Vec4_int_ rect;
-          rect.x = pCursorBitmapRect_x;
-          rect.y = pCursorBitmapRect_y;
-          rect.w = pCursorBitmapRect_w;
-          rect.z = pCursorBitmapRect_z;
-
-    //      render->_4A6DF5(pCursorBitmap_sysmem, v9, &point, &rect);  //
-    срабатывает когда берём курсором вещь в инвенторе this->bRedraw = false;
-        }
-      }
-    */
 }
 
 void Io::Mouse::DrawPickedItem() {

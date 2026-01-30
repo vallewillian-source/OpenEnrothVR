@@ -61,37 +61,99 @@ static bool PartyMove(PartyAction direction) {
 
 
 void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
+    VRInputState vrInput;
+    bool vrActive = false;
+    if (VRManager::Get().IsInitialized() && VRManager::Get().IsSessionRunning()) {
+        vrInput = VRManager::Get().GetVRInputState();
+        vrActive = true;
+    }
+
+    auto isVRDown = [&](InputAction action) -> bool {
+        if (!vrActive) return false;
+        switch (action) {
+            case INPUT_ACTION_MOVE_FORWARD: return vrInput.moveY > 0.5f;
+            case INPUT_ACTION_MOVE_BACKWARDS: return vrInput.moveY < -0.5f;
+            case INPUT_ACTION_TURN_LEFT: return vrInput.turnX < -0.5f;
+            case INPUT_ACTION_TURN_RIGHT: return vrInput.turnX > 0.5f;
+            case INPUT_ACTION_ATTACK: return vrInput.attack;
+            case INPUT_ACTION_QUICK_CAST: return vrInput.castReady;
+            case INPUT_ACTION_JUMP: return vrInput.jump;
+            case INPUT_ACTION_ESCAPE: return vrInput.esc;
+            case INPUT_ACTION_TOGGLE_TURN_BASED: return vrInput.combat;
+            case INPUT_ACTION_OPEN_SPELLBOOK: return vrInput.cast;
+            case INPUT_ACTION_FLY_UP: return vrInput.flyUp;
+            case INPUT_ACTION_FLY_DOWN: return vrInput.flyDown;
+            case INPUT_ACTION_OPEN_QUESTS: return vrInput.quest;
+            case INPUT_ACTION_PASS: return vrInput.pass;
+            case INPUT_ACTION_INTERACT: return vrInput.interact;
+            default: return false;
+        }
+    };
+
+    auto isVRPressed = [&](InputAction action) -> bool {
+        if (!vrActive) return false;
+        switch (action) {
+            case INPUT_ACTION_MOVE_FORWARD: return vrInput.moveY > 0.5f && !(this->prevVRInput.moveY > 0.5f);
+            case INPUT_ACTION_MOVE_BACKWARDS: return vrInput.moveY < -0.5f && !(this->prevVRInput.moveY < -0.5f);
+            case INPUT_ACTION_TURN_LEFT: return vrInput.turnX < -0.5f && !(this->prevVRInput.turnX < -0.5f);
+            case INPUT_ACTION_TURN_RIGHT: return vrInput.turnX > 0.5f && !(this->prevVRInput.turnX > 0.5f);
+            case INPUT_ACTION_ATTACK: return vrInput.attack && !this->prevVRInput.attack;
+            case INPUT_ACTION_QUICK_CAST: return vrInput.castReady && !this->prevVRInput.castReady;
+            case INPUT_ACTION_JUMP: return vrInput.jump && !this->prevVRInput.jump;
+            case INPUT_ACTION_ESCAPE: return vrInput.esc && !this->prevVRInput.esc;
+            case INPUT_ACTION_TOGGLE_TURN_BASED: return vrInput.combat && !this->prevVRInput.combat;
+            case INPUT_ACTION_OPEN_SPELLBOOK: return vrInput.cast && !this->prevVRInput.cast;
+            case INPUT_ACTION_FLY_UP: return vrInput.flyUp && !this->prevVRInput.flyUp;
+            case INPUT_ACTION_FLY_DOWN: return vrInput.flyDown && !this->prevVRInput.flyDown;
+            case INPUT_ACTION_OPEN_QUESTS: return vrInput.quest && !this->prevVRInput.quest;
+            case INPUT_ACTION_PASS: return vrInput.pass && !this->prevVRInput.pass;
+            case INPUT_ACTION_INTERACT: return vrInput.interact && !this->prevVRInput.interact;
+            default: return false;
+        }
+    };
+
     bool resettimer = true;
     for (InputAction action : allInputActions()) {
         bool isTriggered = false;
+        
+        // Check keyboard/gamepad
+        bool keyDown = false;
+        bool keyPressed = false;
         for (PlatformKey key : {actionMapping->keyFor(action), actionMapping->gamepadKeyFor(action)}) {
-            switch (triggerModeForInputAction(action)) {
-            default: assert(false); [[fallthrough]];
-            case TRIGGER_ONCE:
-                isTriggered = controller->isKeyPressedThisFrame(key);
-                break;
-            case TRIGGER_CONTINUOUSLY:
-                isTriggered = controller->isKeyDownThisFrame(key);
-                break;
-            case TRIGGER_WITH_KEYREPEAT:
-                if (controller->isKeyDownThisFrame(key)) {
-                    if (controller->isKeyPressedThisFrame(key)) {
-                        isTriggered = true;
-                    } else {
-                        resettimer = false;
-                    }
-                    // Big delay after first press, then small delay for repeat.
-                    if (this->keydelaytimer >= DELAY_TOGGLE_TIME_FIRST) {
-                        isTriggered = true;
-                        this->keydelaytimer -= DELAY_TOGGLE_TIME_PERIOD;
-                    }
-                }
-                break;
-            }
+            if (controller->isKeyDownThisFrame(key)) keyDown = true;
+            if (controller->isKeyPressedThisFrame(key)) keyPressed = true;
+        }
 
-            if (isTriggered) {
-                break;
+        // Merge with VR
+        if (isVRDown(action)) keyDown = true;
+        if (isVRPressed(action)) keyPressed = true;
+        if (action == INPUT_ACTION_ESCAPE && isVRPressed(action)) {
+            engine->_messageQueue->addMessageCurrentFrame(UIMSG_Escape, window_SpeakInHouse != 0, 0);
+            continue;
+        }
+
+        switch (triggerModeForInputAction(action)) {
+        default: assert(false); [[fallthrough]];
+        case TRIGGER_ONCE:
+            isTriggered = keyPressed;
+            break;
+        case TRIGGER_CONTINUOUSLY:
+            isTriggered = keyDown;
+            break;
+        case TRIGGER_WITH_KEYREPEAT:
+            if (keyDown) {
+                if (keyPressed) {
+                    isTriggered = true;
+                } else {
+                    resettimer = false;
+                }
+                // Big delay after first press, then small delay for repeat.
+                if (this->keydelaytimer >= DELAY_TOGGLE_TIME_FIRST) {
+                    isTriggered = true;
+                    this->keydelaytimer -= DELAY_TOGGLE_TIME_PERIOD;
+                }
             }
+            break;
         }
 
         if (isTriggered) {
@@ -109,38 +171,8 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
             this->keydelaytimer += pEventTimer->dt();
     }
 
-    // VR Input
-    if (VRManager::Get().IsInitialized() && VRManager::Get().IsSessionRunning()) {
-        auto vrInput = VRManager::Get().GetVRInputState();
-        
-        auto processAction = [&](InputAction action) {
-            if (isPaused) ProcessPausedAction(action);
-            else ProcessGameplayAction(action);
-        };
-
-        if (!isPaused) {
-            if (vrInput.move.y > 0.5f) ProcessGameplayAction(INPUT_ACTION_MOVE_FORWARD);
-            if (vrInput.move.y < -0.5f) ProcessGameplayAction(INPUT_ACTION_MOVE_BACKWARDS);
-            
-            if (vrInput.turn.x < -0.5f) ProcessGameplayAction(INPUT_ACTION_TURN_LEFT);
-            if (vrInput.turn.x > 0.5f) ProcessGameplayAction(INPUT_ACTION_TURN_RIGHT);
-
-            if (vrInput.attack) ProcessGameplayAction(INPUT_ACTION_ATTACK);
-            // "Cast Ready" mapped to Quick Cast
-            if (vrInput.castReady) ProcessGameplayAction(INPUT_ACTION_QUICK_CAST);
-            if (vrInput.jump) ProcessGameplayAction(INPUT_ACTION_JUMP);
-            if (vrInput.esc) ProcessGameplayAction(INPUT_ACTION_ESCAPE);
-            if (vrInput.combat) ProcessGameplayAction(INPUT_ACTION_TOGGLE_TURN_BASED);
-            if (vrInput.cast) ProcessGameplayAction(INPUT_ACTION_OPEN_SPELLBOOK);
-            if (vrInput.flyUp) ProcessGameplayAction(INPUT_ACTION_FLY_UP);
-            if (vrInput.flyDown) ProcessGameplayAction(INPUT_ACTION_FLY_DOWN);
-            if (vrInput.quest) ProcessGameplayAction(INPUT_ACTION_OPEN_QUESTS);
-            if (vrInput.pass) ProcessGameplayAction(INPUT_ACTION_PASS);
-        }
-        
-        if (vrInput.interact) {
-            processAction(INPUT_ACTION_INTERACT);
-        }
+    if (vrActive) {
+        this->prevVRInput = vrInput;
     }
 }
 

@@ -7,6 +7,7 @@
 #include "Io/KeyboardController.h"
 #include "Io/KeyboardActionMapping.h"
 #include "Engine/Time/Duration.h"
+#include "Engine/VR/VRInputState.h"
 
 class GUIWindow;
 
@@ -30,6 +31,7 @@ class KeyboardInputHandler {
         lastKeyPressed = PlatformKey::KEY_NONE;
         inputType = TextInputType::None;
         window = nullptr;
+        prevVRInput = {};
     }
 
     bool IsRunKeyToggled() const;
@@ -68,6 +70,8 @@ class KeyboardInputHandler {
     std::string pPressedKeysBuffer;
     TextInputType inputType;
     GUIWindow *window;
+
+    VRInputState prevVRInput;
 };
 }  // namespace Io
 
