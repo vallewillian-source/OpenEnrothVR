@@ -26,6 +26,8 @@
 #include "Utility/Math/TrigLut.h"
 #include "Utility/String/Transformations.h"
 
+#include "Library/Logger/Logger.h"
+
 #include "GUI/GUIProgressBar.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/UIHouses.h"
@@ -164,6 +166,7 @@ int EvtInterpreter::executeOneEvent(int step, bool isNpc) {
         case EVENT_Exit:
             return -1;
         case EVENT_SpeakInHouse:
+            logger->info("Interpretador: EVENT_SpeakInHouse ID: {}", std::to_underlying(ir.data.house_id));
             if (enterHouse(ir.data.house_id)) {
                 pAudioPlayer->playHouseSound(SOUND_enter, false);
                 HouseId houseId = HOUSE_JAIL;
@@ -220,6 +223,7 @@ int EvtInterpreter::executeOneEvent(int step, bool isNpc) {
                 _mapExitTriggered = true;
                 if (current_screen_type == SCREEN_HOUSE) {
                     if (uGameState == GAME_STATE_CHANGE_LOCATION) {
+                        logger->info("Saindo da casa via transição de mapa");
                         while (houseDialogPressEscape()) {}
                         pMediaPlayer->Unload();
                         window_SpeakInHouse->Release();

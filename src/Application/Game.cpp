@@ -603,6 +603,7 @@ void Game::processQueuedMessages() {
                                             continue;
                                     }
                                     window_SpeakInHouse->playHouseGoodbyeSpeech();
+                                    logger->info("Saindo da casa via onEscape");
                                     pAudioPlayer->playHouseSound(SOUND_WoodDoorClosing, false);
                                     pMediaPlayer->Unload();
                                     pGUIWindow_CurrentMenu = window_SpeakInHouse;

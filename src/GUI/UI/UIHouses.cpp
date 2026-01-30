@@ -47,6 +47,8 @@
 #include "Media/Audio/AudioPlayer.h"
 #include "Media/MediaPlayer.h"
 
+#include "Library/Logger/Logger.h"
+
 #include "Utility/Math/TrigLut.h"
 
 using Io::TextInputType;
@@ -380,6 +382,7 @@ bool enterHouse(HouseId uHouseID) {
         return true;
     }
     playHouseSound(uHouseID, HOUSE_SOUND_GENERAL_GREETING);
+    logger->info("Entrando na casa: {} (ID: {})", houseTable[uHouseID].name, std::to_underlying(uHouseID));
     return true;
 }
 
@@ -587,6 +590,7 @@ bool houseDialogPressEscape() {
         pDialogueWindow = nullptr;
 
         if (houseNpcs.size() == 1) {
+            logger->info("Saindo da casa");
             return false;
         }
 
