@@ -97,7 +97,20 @@ Modifications were made to the core OpenGL renderer to support external view mat
 *   **Matrix Override**: `_set_3d_modelview_matrix` and `_set_3d_projection_matrix` now check `VRManager::IsRenderingVREye()`. If true, they bypass the standard `Camera3D` calculations and use the matrices provided by `VRManager` (derived from HMD pose).
 *   **State Management**: `BeginScene3D` was updated to respect the currently bound VR framebuffer instead of forcing a reset to the default backbuffer.
 
-### 3. Build System (`CMakeLists.txt`)
+### 3. Aprendizados: Convergência Estéreo e Conforto Visual
+Durante o desenvolvimento das telas de interface (Houses/Menus), estabelecemos diretrizes críticas para o posicionamento de elementos 2D em espaço 3D:
+
+*   **Regra da Convergência (Profundidade):** 
+    *   Para afastar um objeto e torná-lo mais confortável, as imagens de cada olho devem se mover para **longe do nariz** (eixos de visão mais paralelos).
+    *   No código, isso significa **diminuir** o `convergenceOffset` (valor maior no divisor, ex: `w / 5.0`).
+    *   Mover as imagens para **perto do nariz** (aumentar offset) causa a sensação de que o objeto está "colado na cara" e gera fadiga ocular.
+*   **Conflito Acomodação-Vergência:** As lentes de VR têm foco fixo (geralmente 2 metros). Posicionar telas simulando essa distância através da convergência é essencial para evitar náusea.
+*   **Tamanho Angular:** A percepção de distância é reforçada pelo tamanho. Uma tela maior com eixos paralelos parece uma tela de cinema distante; uma tela pequena com eixos cruzados parece um celular perto do rosto.
+*   **Ancoragem Mundial (World-Locking):** Para interfaces de tela cheia (como casas), a ancoragem fixa na cabeça (Head-Locked) pode ser cansativa. Ancorar a tela no espaço 3D no momento da ativação permite que o usuário explore a interface naturalmente movendo os olhos e a cabeça, reduzindo o esforço visual.
+
+---
+
+### 4. Build System (`CMakeLists.txt`)
 *   Added `FetchContent` logic to automatically download and link the **OpenXR SDK**.
 *   Created a static library target `engine_vr` to encapsulate VR logic.
 

@@ -92,12 +92,20 @@ public:
 
     VRInputState GetVRInputState();
 
-    void SetDebugHouseIndicator(bool enabled) { m_debugHouseIndicator = enabled; }
+    void SetDebugHouseIndicator(bool enabled);
     bool GetDebugHouseIndicator() const { return m_debugHouseIndicator; }
 
 private:
     VRManager();
     ~VRManager();
+
+    // World-locked house overlay state
+    bool m_debugHouseIndicator = false;
+    bool m_housePoseInitialized = false;
+    glm::vec3 m_houseOverlayWorldPos = glm::vec3(0.0f);
+    glm::quat m_houseOverlayWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    int m_houseOverlayScreenW = 0;
+    int m_houseOverlayScreenH = 0;
 
     bool CreateInstance();
     bool GetSystem();
@@ -191,8 +199,6 @@ private:
     bool m_shouldRenderThisFrame = false;
     bool m_isRenderingVR = false;
     int m_currentViewIndex = 0;
-
-    bool m_debugHouseIndicator = false;
     bool m_savedScissorStateValid = false;
     bool m_savedScissorEnabled = false;
     int m_savedScissorBox[4] = {0, 0, 0, 0};

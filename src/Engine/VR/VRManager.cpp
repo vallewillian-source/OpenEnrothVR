@@ -114,6 +114,14 @@ static std::string getActiveRuntimePathWin32() {
 #endif
 }
 
+void VRManager::SetDebugHouseIndicator(bool enabled) {
+    if (enabled && !m_debugHouseIndicator) {
+        // Reset anchor initialization when entering a house
+        m_housePoseInitialized = false;
+    }
+    m_debugHouseIndicator = enabled;
+}
+
 VRManager& VRManager::Get() {
     static VRManager instance;
     return instance;
@@ -548,92 +556,74 @@ void VRManager::RenderOverlay3D() {
     glBindVertexArray(m_quadVAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    // Debug House Indicator: Draw a white screen with monitor aspect ratio in the center
+    // Debug House Indicator: Draw the monitor screen anchored in the world
     if (m_debugHouseIndicator) {
-        glEnable(GL_SCISSOR_TEST);
         int w = m_views[m_currentViewIndex].width;
         int h = m_views[m_currentViewIndex].height;
 
-        // Calculate aspect ratio based on monitor
-        int screenW = w / 2;
-        int screenH = (int)(screenW / 1.333f);
-
-        // DRASTIC CONVERGENCE CORRECTION
-        // The user reports screens are "stuck to the edges" (Left eye -> Left, Right eye -> Right).
-        // This means they are too far apart. We need to push them towards the nose.
-        // Left Eye (0): Move RIGHT (+)
-        // Right Eye (1): Move LEFT (-)
-        
-        // Start with the calculated FOV center
-        float angleCenterH = (m_xrViews[m_currentViewIndex].fov.angleRight + m_xrViews[m_currentViewIndex].fov.angleLeft) / 2.0f;
-        float angleWidthH = (m_xrViews[m_currentViewIndex].fov.angleRight - m_xrViews[m_currentViewIndex].fov.angleLeft);
-        float centerOffsetRatioH = angleCenterH / angleWidthH;
-        int pixelCenterH = (int)(w * (0.5f + centerOffsetRatioH));
-
-        float angleCenterV = (m_xrViews[m_currentViewIndex].fov.angleUp + m_xrViews[m_currentViewIndex].fov.angleDown) / 2.0f;
-        float angleWidthV = (m_xrViews[m_currentViewIndex].fov.angleUp - m_xrViews[m_currentViewIndex].fov.angleDown);
-        float centerOffsetRatioV = angleCenterV / angleWidthV;
-        int pixelCenterV = (int)(h * (0.5f - centerOffsetRatioV));
-
-        // Apply a DRASTIC offset to force them to the center
-        int convergenceOffset = w / 4; // 25% of the screen width
-        if (m_currentViewIndex == 0) {
-            pixelCenterH += convergenceOffset; // Push Left eye screen towards the RIGHT (nose)
-        } else {
-            pixelCenterH -= convergenceOffset; // Push Right eye screen towards the LEFT (nose)
+        if (!m_housePoseInitialized) {
+            // Capture head position ONCE when entering the house
+            glm::mat4 invView = glm::inverse(m_views[m_currentViewIndex].viewMatrix);
+            glm::vec3 camPos = glm::vec3(invView[3]);
+            glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+            
+            m_houseOverlayWorldPos = camPos + camFwd * 2.5f;
+            m_houseOverlayWorldRot = glm::quat_cast(invView);
+            
+            m_houseOverlayScreenW = (int)(w / 2.2f);
+            m_houseOverlayScreenH = (int)(m_houseOverlayScreenW / 1.333f);
+            m_housePoseInitialized = true;
         }
 
-        glScissor(pixelCenterH - screenW / 2, pixelCenterV - screenH / 2, screenW, screenH);
+        // Project the world position to the current eye's screen space
+        glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+        glm::mat4 projection = m_views[m_currentViewIndex].projectionMatrix;
         
-        // MVP: Instead of clear white, we use the captured monitor screen texture!
-        // This is a minimal change: we just reuse the RenderOverlay3D logic here 
-        // but with a fixed screen-space position (scissor) instead of 3D world position.
+        glm::vec4 eyePos = view * glm::vec4(m_houseOverlayWorldPos, 1.0f);
         
-        if (m_quadShader != 0 && m_overlayTexture != 0) {
-            glDisable(GL_DEPTH_TEST);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            
-            glUseProgram(m_quadShader);
-            
-            // For screen-space quad, we can just use identity matrices or a simple ortho
-            glm::mat4 identity = glm::mat4(1.0f);
-            
-            // We want to map the quad to the scissor area. 
-            // However, it's easier to just draw a full-screen quad and let the scissor do the work.
-            // But the quad is defined in [-0.5, 0.5] range.
-            
-            // Projection: Ortho that matches the view dimensions
-            glm::mat4 ortho = glm::ortho(0.0f, (float)w, 0.0f, (float)h);
-            
-            // Model: Scale to screenW/screenH and translate to pixelCenterH/pixelCenterV
-            glm::mat4 model = glm::translate(identity, glm::vec3((float)pixelCenterH, (float)pixelCenterV, 0.0f));
-            model = glm::scale(model, glm::vec3((float)screenW, (float)screenH, 1.0f));
-            
-            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &identity[0][0]);
-            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &ortho[0][0]);
-            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
-            
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
-            glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
-            
-            glBindVertexArray(m_quadVAO);
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        } else {
-            // Fallback to white if shaders aren't ready
-            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-        }
+        // If the object is behind the camera, don't render it
+        if (eyePos.z < 0.0f) {
+            glm::vec4 ndcPos = projection * eyePos;
+            ndcPos /= ndcPos.w;
 
-        // Debug Log to confirm values
-        static int frameCount = 0;
-        if (frameCount++ % 300 == 0 && logger) {
-            logger->info("VR Indicator (House Mode): View {} | W: {} | CenterH: {} | ScissorX: {}", 
-                         m_currentViewIndex, w, pixelCenterH, pixelCenterH - screenW / 2);
-        }
+            // Convert NDC to pixel coordinates
+            int pixelCenterH = (int)((ndcPos.x + 1.0f) * 0.5f * w);
+            int pixelCenterV = (int)((ndcPos.y + 1.0f) * 0.5f * h);
 
-        glDisable(GL_SCISSOR_TEST);
+            glEnable(GL_SCISSOR_TEST);
+            int screenW = m_houseOverlayScreenW;
+            int screenH = m_houseOverlayScreenH;
+
+            glScissor(pixelCenterH - screenW / 2, pixelCenterV - screenH / 2, screenW, screenH);
+            
+            if (m_quadShader != 0 && m_overlayTexture != 0) {
+                glDisable(GL_DEPTH_TEST);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glUseProgram(m_quadShader);
+                
+                glm::mat4 identity = glm::mat4(1.0f);
+                glm::mat4 ortho = glm::ortho(0.0f, (float)w, 0.0f, (float)h);
+                glm::mat4 model = glm::translate(identity, glm::vec3((float)pixelCenterH, (float)pixelCenterV, 0.0f));
+                model = glm::scale(model, glm::vec3((float)screenW, (float)screenH, 1.0f));
+                
+                glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &identity[0][0]);
+                glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &ortho[0][0]);
+                glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
+                glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+                
+                glBindVertexArray(m_quadVAO);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            } else {
+                glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+
+            glDisable(GL_SCISSOR_TEST);
+        }
     }
 
     // Restore State
