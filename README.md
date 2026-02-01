@@ -6,10 +6,7 @@ This project is a fork of [OpenEnroth](https://github.com/OpenEnroth/OpenEnroth)
 
 - **3DOF Tracking**: Headset orientation controls the in-game camera view.
 - **Stereoscopic Rendering**: Full 3D world rendering for both eyes (Left/Right).
-- **Input**: Standard Keyboard & Mouse controls.
-  - **WASD**: Move Party.
-  - **Mouse**: Rotate Party Body.
-  - **Headset**: Look around (Independent Head/Body rotation).
+- **Input**: VR controllers or standard Keyboard & Mouse controls.
 - **Engine**: Based on OpenEnroth (modern C++ reimplementation of MM7 engine).
 - **Backend**: OpenXR (Compatible with SteamVR, Oculus/Meta, Windows Mixed Reality).
 
@@ -34,7 +31,7 @@ To run or build this mod, you need:
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/YourUsername/mm7_vr.git
+    git clone https://github.com/vallewillian-source/mm7_vr.git
     cd mm7_vr
     ```
 
@@ -113,6 +110,13 @@ Durante o desenvolvimento das telas de interface (Houses/Menus), estabelecemos d
 ### 4. Build System (`CMakeLists.txt`)
 *   Added `FetchContent` logic to automatically download and link the **OpenXR SDK**.
 *   Created a static library target `engine_vr` to encapsulate VR logic.
+
+### 5. Mandatory Rules for Vibe Coding Models
+- Never compile automatically generated code.
+- Always use explicit casts instead of implicit casts.
+- Never use `dynamic_cast` for type checking.
+- Always use `static_cast` for type conversion.
+- Never use `reinterpret_cast` for type conversion.
 
 ---
 

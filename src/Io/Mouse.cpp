@@ -110,6 +110,7 @@ void Io::Mouse::DrawCursor() {
 
              // Handle Click
              if (vrClick) {
+                 if (logger) logger->info("Mouse: vrClick detected. Calling UI_OnMouseLeftClick.");
                  this->UI_OnMouseLeftClick();
              }
 
@@ -189,8 +190,11 @@ void Io::Mouse::DrawPickedItem() {
 }
 
 void Io::Mouse::UI_OnMouseLeftClick() {
-    if (current_screen_type == SCREEN_VIDEO || isHoldingMouseRightButton())
+    if (logger) logger->info("Mouse: UI_OnMouseLeftClick called.");
+    if (current_screen_type == SCREEN_VIDEO || isHoldingMouseRightButton()) {
+        if (logger) logger->info("Mouse: UI_OnMouseLeftClick blocked by VIDEO or RightButton.");
         return;
+    }
 
     if (pGUIWindow_BranchlessDialogue && pGUIWindow_BranchlessDialogue->event() == EVENT_PressAnyKey) {
         releaseBranchlessDialogue();

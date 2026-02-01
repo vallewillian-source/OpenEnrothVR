@@ -744,13 +744,19 @@ void VRManager::UpdateLeftRay() {
                 float halfH = m_houseOverlayHeightMeters * 0.5f;
                 
                 if (localHit.x >= -halfW && localHit.x <= halfW &&
-                    localHit.y >= -halfH && localHit.y <= halfH) {
+                        localHit.y >= -halfH && localHit.y <= halfH) {
                     
-                    m_leftRayHitHouse = true;
-                    m_leftRayHitPos = hitPoint;
-                    m_leftRayLength = t; // Stop ray at the screen
-                    
-                    // Optional: Log hit once
+                        m_leftRayHitHouse = true;
+                        m_leftRayHitPos = hitPoint;
+                        m_leftRayLength = t; // Stop ray at the screen
+                        
+                        // Calculate normalized screen coordinates (0..1)
+                        // X: -halfW..halfW -> 0..1
+                        m_houseHitX = (localHit.x / m_houseOverlayWidthMeters) + 0.5f;
+                        // Y: halfH..-halfH -> 0..1 (Screen Y is down, 3D Y is up)
+                        m_houseHitY = 0.5f - (localHit.y / m_houseOverlayHeightMeters);
+
+                        // Optional: Log hit once
                     static bool loggedHit = false;
                     if (!loggedHit && logger) {
                         logger->info("VRManager: Ray Hit House Overlay at dist {}, local({},{})", t, localHit.x, localHit.y);
@@ -1708,11 +1714,19 @@ void VRManager::Shutdown() {
 }
 
 bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed) {
+    static bool loggedCall = false;
+    if (!loggedCall && logger) {
+        logger->info("VRManager: GetMenuMouseState called.");
+        loggedCall = true;
+    }
+
     outX = 0;
     outY = 0;
     outClickPressed = false;
 
-    if (!m_overlayLayerEnabled || !m_overlayLayerHasFrame) {
+    const bool canUseOverlayLayer = m_overlayLayerEnabled && m_overlayLayerHasFrame;
+    const bool canUseHouseOverlay = m_debugHouseIndicator;
+    if (!canUseOverlayLayer && !canUseHouseOverlay) {
         return false;
     }
     if (m_session == XR_NULL_HANDLE || !m_sessionRunning)
@@ -1749,6 +1763,9 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     }
 
     // Get input from Left Stick (m_actionMove) and Left/Right Triggers (m_actionEsc/m_actionInteract)
+    const XrPath leftHandPath = (m_handLeftPath != XR_NULL_PATH) ? m_handLeftPath : XR_NULL_PATH;
+    const XrPath rightHandPath = (m_handRightPath != XR_NULL_PATH) ? m_handRightPath : XR_NULL_PATH;
+
     XrActionStateVector2f moveState = {XR_TYPE_ACTION_STATE_VECTOR2F};
     if (m_actionMove != XR_NULL_HANDLE) {
         XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
@@ -1774,7 +1791,17 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     }
 
     // Update Cursor Position
-    if (moveState.isActive) {
+    if (m_leftRayHitHouse) {
+        m_menuCursorX = m_houseHitX * menuWidth;
+        m_menuCursorY = m_houseHitY * menuHeight;
+        if (logger) {
+            static bool loggedRayHit = false;
+            if (!loggedRayHit) {
+                logger->info("VRManager: Ray hit house overlay. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
+                loggedRayHit = true;
+            }
+        }
+    } else if (moveState.isActive) {
         // Move X
         m_menuCursorX += moveState.currentState.x * m_menuCursorSpeed;
 
@@ -1786,8 +1813,18 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
         m_menuCursorY = std::clamp(m_menuCursorY, 0.0f, (float)menuHeight - 1.0f);
     }
 
-    // Update Click State
-    // Threshold for trigger
+    if (logger) {
+        static int logCounter = 0;
+        logCounter++;
+        if (logCounter > 300) { // Log every ~5 seconds at 60fps
+            logger->info("VRManager: Trigger states - Left: {} (Active: {}), Right: {} (Active: {})", 
+                triggerLeftState.currentState, triggerLeftState.isActive, 
+                triggerRightState.currentState, triggerRightState.isActive);
+            logCounter = 0;
+        }
+    }
+
+    // Check for click (Edge Detection)
     bool pressedNow = false;
     if ((triggerLeftState.isActive && triggerLeftState.currentState > 0.5f) || 
         (triggerRightState.isActive && triggerRightState.currentState > 0.5f)) {
@@ -1797,9 +1834,13 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     outClickPressed = pressedNow && !m_menuSelectPressedPrev;
     m_menuSelectPressedPrev = pressedNow;
 
-    outX = (int)m_menuCursorX;
-    outY = (int)m_menuCursorY;
-    
+    if (logger && outClickPressed) {
+        logger->info("VRManager: Click Detected! (X: {}, Y: {})", m_menuCursorX, m_menuCursorY);
+    }
+
+    outX = static_cast<int>(m_menuCursorX);
+    outY = static_cast<int>(m_menuCursorY);
+
     return true;
 }
 
