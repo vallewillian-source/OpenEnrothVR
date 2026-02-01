@@ -106,6 +106,8 @@ private:
     glm::quat m_houseOverlayWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     int m_houseOverlayScreenW = 0;
     int m_houseOverlayScreenH = 0;
+    float m_houseOverlayWidthMeters = 0.0f;
+    float m_houseOverlayHeightMeters = 0.0f;
 
     bool CreateInstance();
     bool GetSystem();
@@ -143,6 +145,8 @@ private:
     
     float m_leftRayLength = 5.0f;
     bool m_leftRayValid = false;
+    bool m_leftRayHitHouse = false;
+    glm::vec3 m_leftRayHitPos = glm::vec3(0.0f);
     glm::vec3 m_leftRayOrigin = glm::vec3(0.0f);
     glm::vec3 m_leftRayDirection = glm::vec3(0.0f, 0.0f, -1.0f);
 

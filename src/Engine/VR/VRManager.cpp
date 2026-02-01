@@ -720,6 +720,46 @@ void VRManager::UpdateLeftRay() {
     // Aim pose forward is usually -Z in OpenXR
     m_leftRayDirection = glm::normalize(orientation * glm::vec3(0.0f, 0.0f, -1.0f));
     m_leftRayValid = true;
+
+    // Check intersection with House Overlay
+    m_leftRayHitHouse = false;
+    m_leftRayLength = 10.0f; // Reset length
+
+    if (m_housePoseInitialized && m_debugHouseIndicator) {
+        glm::vec3 planeNormal = m_houseOverlayWorldRot * glm::vec3(0.0f, 0.0f, 1.0f); // Face towards camera (Z+)
+        float denom = glm::dot(m_leftRayDirection, planeNormal);
+        
+        // Ray should hit the front face (denom < 0)
+        if (denom < -0.0001f) {
+            float t = glm::dot(m_houseOverlayWorldPos - m_leftRayOrigin, planeNormal) / denom;
+            if (t > 0.0f) {
+                glm::vec3 hitPoint = m_leftRayOrigin + m_leftRayDirection * t;
+                
+                // Transform to local space of the plane to check bounds
+                glm::vec3 localHit = glm::inverse(m_houseOverlayWorldRot) * (hitPoint - m_houseOverlayWorldPos);
+                
+                // Check bounds (assuming plane is centered at m_houseOverlayWorldPos)
+                // Note: The screen rendering centers it.
+                float halfW = m_houseOverlayWidthMeters * 0.5f;
+                float halfH = m_houseOverlayHeightMeters * 0.5f;
+                
+                if (localHit.x >= -halfW && localHit.x <= halfW &&
+                    localHit.y >= -halfH && localHit.y <= halfH) {
+                    
+                    m_leftRayHitHouse = true;
+                    m_leftRayHitPos = hitPoint;
+                    m_leftRayLength = t; // Stop ray at the screen
+                    
+                    // Optional: Log hit once
+                    static bool loggedHit = false;
+                    if (!loggedHit && logger) {
+                        logger->info("VRManager: Ray Hit House Overlay at dist {}, local({},{})", t, localHit.x, localHit.y);
+                        loggedHit = true;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void VRManager::RenderLeftHouseRay() {
@@ -785,6 +825,11 @@ void VRManager::RenderLeftHouseRay() {
 
     glLineWidth(1.0f);
     glEnable(GL_DEPTH_TEST);
+
+    // If hit, draw a cursor at the intersection point
+    if (m_leftRayHitHouse) {
+        RenderDebugCircle(m_leftRayHitPos, 0.015f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red cursor
+    }
 }
 
 void VRManager::RenderDebugCircle(const glm::vec3& position, float radius, const glm::vec4& color) {
@@ -994,6 +1039,25 @@ void VRManager::RenderOverlay3D() {
             
             m_houseOverlayScreenW = (int)(w / 2.2f);
             m_houseOverlayScreenH = (int)(m_houseOverlayScreenW / 1.333f);
+
+            // Calculate Physical Dimensions at 2.5m distance
+            // Total Frustum Width at Distance D = D * (tan(Right) - tan(Left))
+            float dist = 2.5f;
+            float tanLeft = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+            float tanRight = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+            float tanDown = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+            float tanUp = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+            
+            float frustumWidthAtDist = dist * (tanRight - tanLeft);
+            float frustumHeightAtDist = dist * (tanUp - tanDown);
+            
+            m_houseOverlayWidthMeters = frustumWidthAtDist * ((float)m_houseOverlayScreenW / (float)w);
+            m_houseOverlayHeightMeters = frustumHeightAtDist * ((float)m_houseOverlayScreenH / (float)h);
+            
+            if (logger) {
+                 logger->info("VRManager: House Overlay Init. Size in Meters: {} x {}", m_houseOverlayWidthMeters, m_houseOverlayHeightMeters);
+            }
+
             m_housePoseInitialized = true;
         }
 
