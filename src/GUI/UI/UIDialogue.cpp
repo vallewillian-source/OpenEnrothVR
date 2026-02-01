@@ -328,14 +328,8 @@ void GUIWindow_Dialogue::Update() {
                 }
                 DrawTitleText(assets->pFontArrus.get(), 0, pButton->rect.y, pTextColor, pButton->sLabel, 3, window);
             }
-            if (logger) {
-                logger->info("UIDialogue: Passando {} opções para VRManager", vrOptions.size());
-            }
             VRManager::Get().SetDialogueOptions(vrOptions);
         } else {
-            if (logger) {
-                logger->info("UIDialogue: Nenhuma opção encontrada, limpando menu VR");
-            }
             VRManager::Get().ClearDialogueOptions();
         }
     render->DrawQuad2D(ui_exit_cancel_button_background, {471, 445});

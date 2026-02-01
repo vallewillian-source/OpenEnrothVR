@@ -222,9 +222,9 @@ void VRManager::SetDialogueOptions(const std::vector<DialogueOption>& options) {
     }
 
     if (logger) {
-        logger->info("VRManager: SetDialogueOptions mudou ({} opções)", options.size());
+        logger->debug("VRManager: SetDialogueOptions mudou ({} opções)", options.size());
         for (size_t i = 0; i < options.size(); ++i) {
-            logger->info("  Opção {}: '{}' (ID: {}, Msg: {})", i, options[i].text, options[i].id, options[i].msg);
+            logger->debug("  Opção {}: '{}' (ID: {}, Msg: {})", i, options[i].text, options[i].id, options[i].msg);
         }
     }
     m_dialogueOptions = options;
@@ -235,7 +235,7 @@ void VRManager::SetDialogueOptions(const std::vector<DialogueOption>& options) {
 
 void VRManager::ClearDialogueOptions() {
     if (!m_dialogueOptions.empty() && logger) {
-        logger->info("VRManager: ClearDialogueOptions chamada (limpando {} opções)", m_dialogueOptions.size());
+        logger->debug("VRManager: ClearDialogueOptions chamada (limpando {} opções)", m_dialogueOptions.size());
     }
     m_dialogueOptions.clear();
     m_selectedOptionIndex = 0;
@@ -262,13 +262,13 @@ void VRManager::UpdateDialogueMenuTexture() {
     m_menuTextureHeight = totalHeight;
 
     if (logger) {
-        logger->info("VRManager: Atualizando textura do menu. Dimensões: {}x{}, Itens: {}", 
+        logger->debug("VRManager: Atualizando textura do menu. Dimensões: {}x{}, Itens: {}", 
                      m_menuTextureWidth, m_menuTextureHeight, m_dialogueOptions.size());
     }
 
     if (m_dialogueMenuTexture == 0) {
         glGenTextures(1, &m_dialogueMenuTexture);
-        if (logger) logger->info("VRManager: Gerada nova textura para menu: {}", m_dialogueMenuTexture);
+        if (logger) logger->debug("VRManager: Gerada nova textura para menu: {}", m_dialogueMenuTexture);
     }
 
     glBindTexture(GL_TEXTURE_2D, m_dialogueMenuTexture);

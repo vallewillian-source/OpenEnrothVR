@@ -874,14 +874,8 @@ void GUIWindow_House::drawOptions(std::vector<std::string> &optionsText, Color s
     }
 
     if (!vrOptions.empty()) {
-            if (logger) {
-                logger->info("UIHouses: Passando {} opções para VRManager", vrOptions.size());
-            }
             VRManager::Get().SetDialogueOptions(vrOptions);
         } else {
-            if (logger) {
-                logger->info("UIHouses: Nenhuma opção VR encontrada, limpando menu VR");
-            }
             VRManager::Get().ClearDialogueOptions();
         }
 }
