@@ -1257,14 +1257,15 @@ void VRManager::RenderDialogueHUD() {
     hudProjection[2][3] = -1.0f;
     hudProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
-    // Head-locked position: 1.5m in front, 0.2m down
+    // Head-locked position: 1.5m in front (matching standard overlay depth)
     glm::mat4 invView = glm::inverse(view);
     glm::vec3 camPos = glm::vec3(invView[3]);
     glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
     glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
     
-    // HUD Pos: um pouco mais longe e centralizado para garantir visibilidade
-    glm::vec3 hudPos = camPos + camFwd * 1.5f - camUp * 0.2f; 
+    // HUD Pos: 1.5m distance (same as game menu), slightly up (0.12m) to sit right above the dialogue options
+    // "Lado a lado" interpreted as same depth plane, vertically stacked but close
+    glm::vec3 hudPos = camPos + camFwd * 1.5f + camUp * 0.12f; 
 
     if (!loggedHud && logger) {
         glm::vec4 clipPos = hudProjection * view * glm::vec4(hudPos, 1.0f);
@@ -1279,7 +1280,7 @@ void VRManager::RenderDialogueHUD() {
 
     // Background panel scale based on texture aspect ratio
     float aspect = (float)m_dialogueTextureWidth / (float)m_dialogueTextureHeight;
-    float panelWidth = 1.2f; // Um pouco maior para MVP
+    float panelWidth = 0.9f; // Reduzido de 1.2f para ser mais discreto
     float panelHeight = panelWidth / aspect;
 
     glm::mat4 model = invView;
@@ -1298,6 +1299,7 @@ void VRManager::RenderDialogueHUD() {
         glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "view"), 1, GL_FALSE, &view[0][0]);
         glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
         
+        // Match rotation and position of text for the background
         glm::mat4 backgroundModel = glm::scale(model, glm::vec3(panelWidth + 0.02f, panelHeight + 0.02f, 1.0f));
         glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "model"), 1, GL_FALSE, &backgroundModel[0][0]);
         glUniform4f(glGetUniformLocation(m_debugShader, "color"), 0.1f, 0.1f, 0.1f, 0.9f); 
