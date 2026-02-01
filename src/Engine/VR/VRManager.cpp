@@ -118,6 +118,13 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
     if (enabled && !m_debugHouseIndicator) {
         // Reset anchor initialization when entering a house
         m_housePoseInitialized = false;
+        if (logger) {
+            logger->info("VRManager: DebugHouseIndicator ENABLED (Entering house)");
+        }
+    } else if (!enabled && m_debugHouseIndicator) {
+        if (logger) {
+            logger->info("VRManager: DebugHouseIndicator DISABLED (Leaving house)");
+        }
     }
     m_debugHouseIndicator = enabled;
 }
@@ -396,6 +403,48 @@ void main() {
 }
 )";
 
+static const char* rayVertSrc = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+uniform mat4 view;
+uniform mat4 projection;
+void main() {
+    gl_Position = projection * view * vec4(aPos, 1.0);
+}
+)";
+
+static const char* rayFragSrc = R"(
+#version 330 core
+out vec4 FragColor;
+uniform vec4 color;
+void main() {
+    FragColor = color;
+}
+)";
+
+static const char* debugVertSrc = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+
+uniform mat4 view;
+uniform mat4 projection;
+uniform mat4 model;
+
+void main() {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+}
+)";
+
+static const char* debugFragSrc = R"(
+#version 330 core
+out vec4 FragColor;
+uniform vec4 color;
+
+void main() {
+    FragColor = color;
+}
+)";
+
 void VRManager::InitOverlayQuad() {
     // Quad vertices (centered at 0,0, facing Z?)
     // 1.5m away means we place it at Z = -1.5 (in OpenXR space)
@@ -475,6 +524,379 @@ void VRManager::InitOverlayQuad() {
 
     glDeleteShader(vertex);
     glDeleteShader(fragment);
+}
+
+void VRManager::InitRayResources() {
+    if (m_rayVAO != 0) return;
+
+    if (logger) logger->info("VRManager: Initializing Ray Resources...");
+
+    GLuint vertex = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex, 1, &rayVertSrc, NULL);
+    glCompileShader(vertex);
+    GLint success = 0;
+    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+        if (logger) logger->error("VR Ray Vertex Shader Compilation Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Ray Vertex Shader Compiled successfully.");
+    }
+
+    GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, &rayFragSrc, NULL);
+    glCompileShader(fragment);
+    glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+        if (logger) logger->error("VR Ray Fragment Shader Compilation Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Ray Fragment Shader Compiled successfully.");
+    }
+
+    m_rayShader = glCreateProgram();
+    glAttachShader(m_rayShader, vertex);
+    glAttachShader(m_rayShader, fragment);
+    glLinkProgram(m_rayShader);
+    glGetProgramiv(m_rayShader, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(m_rayShader, 512, NULL, infoLog);
+        if (logger) logger->error("VR Ray Shader Linking Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Ray Shader Program linked successfully.");
+    }
+
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+
+    glGenVertexArrays(1, &m_rayVAO);
+    glGenBuffers(1, &m_rayVBO);
+    glBindVertexArray(m_rayVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_rayVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6, nullptr, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void*)0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    if (logger) logger->info("VRManager: Ray Resources initialized (VAO: {}, VBO: {}, Shader: {})", m_rayVAO, m_rayVBO, m_rayShader);
+}
+
+void VRManager::InitDebugResources() {
+    if (m_debugVAO != 0) return;
+
+    if (logger) logger->info("VRManager: Initializing Debug Resources...");
+
+    GLuint vertex = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex, 1, &debugVertSrc, NULL);
+    glCompileShader(vertex);
+    GLint success = 0;
+    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+        if (logger) logger->error("VR Debug Vertex Shader Compilation Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Debug Vertex Shader Compiled successfully.");
+    }
+
+    GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, &debugFragSrc, NULL);
+    glCompileShader(fragment);
+    glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+        if (logger) logger->error("VR Debug Fragment Shader Compilation Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Debug Fragment Shader Compiled successfully.");
+    }
+
+    m_debugShader = glCreateProgram();
+    glAttachShader(m_debugShader, vertex);
+    glAttachShader(m_debugShader, fragment);
+    glLinkProgram(m_debugShader);
+    glGetProgramiv(m_debugShader, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(m_debugShader, 512, NULL, infoLog);
+        if (logger) logger->error("VR Debug Shader Linking Failed: {}", infoLog);
+    } else if (logger) {
+        logger->info("VRManager: Debug Shader Program linked successfully.");
+    }
+
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+
+    // Generate geometry for a simple circle (triangle fan)
+    std::vector<float> circleVertices;
+    const int segments = 32;
+    const float radius = 1.0f;
+    
+    // Center vertex
+    circleVertices.push_back(0.0f);
+    circleVertices.push_back(0.0f);
+    circleVertices.push_back(0.0f);
+    
+    // Outer vertices
+    for (int i = 0; i <= segments; ++i) {
+        float angle = 2.0f * M_PI * i / segments;
+        circleVertices.push_back(cos(angle) * radius);
+        circleVertices.push_back(sin(angle) * radius);
+        circleVertices.push_back(0.0f);
+    }
+
+    glGenVertexArrays(1, &m_debugVAO);
+    glGenBuffers(1, &m_debugVBO);
+    glBindVertexArray(m_debugVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_debugVBO);
+    glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(float), circleVertices.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void*)0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    
+    m_debugVertexCount = circleVertices.size() / 3;
+
+    if (logger) logger->info("VRManager: Debug Resources initialized (VAO: {}, VBO: {}, Shader: {}, Vertices: {})", 
+                             m_debugVAO, m_debugVBO, m_debugShader, (int)m_debugVertexCount);
+}
+
+void VRManager::UpdateLeftRay() {
+    m_leftRayValid = false;
+    if (m_session == XR_NULL_HANDLE || !m_sessionRunning) return;
+    if (m_leftAimSpace == XR_NULL_HANDLE) {
+        static bool logged = false;
+        if (!logged && logger) {
+            logger->warning("VRManager: m_leftAimSpace is NULL");
+            logged = true;
+        }
+        return;
+    }
+
+    XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION};
+    XrResult res = xrLocateSpace(m_leftAimSpace, m_appSpace, m_frameState.predictedDisplayTime, &location);
+    if (XR_FAILED(res)) {
+        static bool loggedErr = false;
+        if (!loggedErr && logger) {
+            logger->warning("VRManager: xrLocateSpace failed with {}", (int)res);
+            loggedErr = true;
+        }
+        return;
+    }
+
+    if ((location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) == 0 ||
+        (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) == 0) {
+        static bool loggedFlags = false;
+        if (!loggedFlags && logger) {
+            logger->warning("VRManager: Left ray location flags invalid: {}", (int)location.locationFlags);
+            loggedFlags = true;
+        }
+        return;
+    }
+
+    static bool loggedSuccess = false;
+    if (!loggedSuccess && logger) {
+        logger->info("VRManager: Left controller pose located successfully!");
+        loggedSuccess = true;
+    }
+
+    glm::quat orientation(
+        location.pose.orientation.w,
+        location.pose.orientation.x,
+        location.pose.orientation.y,
+        location.pose.orientation.z
+    );
+    glm::vec3 position(
+        location.pose.position.x,
+        location.pose.position.y,
+        location.pose.position.z
+    );
+
+    m_leftRayOrigin = position;
+    // Aim pose forward is usually -Z in OpenXR
+    m_leftRayDirection = glm::normalize(orientation * glm::vec3(0.0f, 0.0f, -1.0f));
+    m_leftRayValid = true;
+}
+
+void VRManager::RenderLeftHouseRay() {
+    if (m_currentViewIndex < 0 || m_currentViewIndex >= static_cast<int>(m_views.size())) return;
+
+    InitRayResources();
+    if (m_rayVAO == 0 || m_rayShader == 0) return;
+
+    UpdateLeftRay();
+    if (!m_leftRayValid) return;
+
+    static bool loggedRender = false;
+    if (!loggedRender && logger) {
+        logger->info("VRManager: Rendering Left House Ray...");
+        loggedRender = true;
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(3.0f);
+
+    glm::vec3 endPos = m_leftRayOrigin + m_leftRayDirection * m_leftRayLength;
+    float vertices[6] = {
+        m_leftRayOrigin.x, m_leftRayOrigin.y, m_leftRayOrigin.z,
+        endPos.x, endPos.y, endPos.z
+    };
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_rayVBO);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glUseProgram(m_rayShader);
+    const glm::mat4& view = m_views[m_currentViewIndex].viewMatrix;
+    
+    // Create a local projection matrix with Near=0.05f to ensure the ray is visible
+    // This avoids messing with the global projection matrix that the game engine relies on
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f; 
+    
+    glm::mat4 localProjection(0.0f);
+    localProjection[0][0] = 2.0f / (right - left);
+    localProjection[1][1] = 2.0f / (up - down);
+    localProjection[2][0] = (right + left) / (right - left);
+    localProjection[2][1] = (up + down) / (up - down);
+    localProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    localProjection[2][3] = -1.0f;
+    localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+
+    glUniformMatrix4fv(glGetUniformLocation(m_rayShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_rayShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
+    glUniform4f(glGetUniformLocation(m_rayShader, "color"), 1.0f, 0.0f, 0.0f, 1.0f);
+
+    glBindVertexArray(m_rayVAO);
+    glDrawArrays(GL_LINES, 0, 2);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR && logger) {
+        logger->error("VRManager: RenderLeftHouseRay glDrawArrays error: 0x{:x}", err);
+    }
+    glBindVertexArray(0);
+
+    glLineWidth(1.0f);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void VRManager::RenderDebugCircle(const glm::vec3& position, float radius, const glm::vec4& color) {
+    if (m_currentViewIndex < 0 || m_currentViewIndex >= static_cast<int>(m_views.size())) return;
+
+    InitDebugResources();
+    if (m_debugVAO == 0 || m_debugShader == 0) return;
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glUseProgram(m_debugShader);
+    const glm::mat4& view = m_views[m_currentViewIndex].viewMatrix;
+    
+    // Create a local projection matrix with Near=0.05f to ensure the controller is visible
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f;
+    
+    glm::mat4 localProjection(0.0f);
+    localProjection[0][0] = 2.0f / (right - left);
+    localProjection[1][1] = 2.0f / (up - down);
+    localProjection[2][0] = (right + left) / (right - left);
+    localProjection[2][1] = (up + down) / (up - down);
+    localProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    localProjection[2][3] = -1.0f;
+    localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+    
+    // Create model matrix: translate to position and scale by radius
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::scale(model, glm::vec3(radius));
+
+    glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "model"), 1, GL_FALSE, &model[0][0]);
+    glUniform4f(glGetUniformLocation(m_debugShader, "color"), color.r, color.g, color.b, color.a);
+
+    glBindVertexArray(m_debugVAO);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, m_debugVertexCount);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR && logger) {
+        logger->error("VRManager: RenderDebugCircle glDrawArrays error: 0x{:x}", err);
+    }
+    glBindVertexArray(0);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void VRManager::RenderDebugController() {
+    if (m_currentViewIndex < 0 || m_currentViewIndex >= static_cast<int>(m_views.size())) {
+        return;
+    }
+
+    static bool loggedRender = false;
+    if (!loggedRender && logger) {
+        logger->info("VRManager: Rendering Debug Controller...");
+        loggedRender = true;
+    }
+
+    if (m_leftAimSpace == XR_NULL_HANDLE) {
+        static bool loggedError = false;
+        if (!loggedError && logger) {
+            logger->error("VRManager: Cannot render debug controller - m_leftAimSpace is NULL");
+            loggedError = true;
+        }
+        return;
+    }
+
+    XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION};
+    XrResult res = xrLocateSpace(m_leftAimSpace, m_appSpace, m_frameState.predictedDisplayTime, &location);
+    
+    if (XR_SUCCEEDED(res)) {
+        if (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) {
+            glm::vec3 pos = {location.pose.position.x, location.pose.position.y, location.pose.position.z};
+            RenderDebugCircle(pos, 0.05f, glm::vec4(0.0f, 1.0f, 0.0f, 0.8f));
+            
+            static bool loggedPose = false;
+            if (!loggedPose && logger) {
+                // Calculate NDC to verify visibility
+                const glm::mat4& view = m_views[m_currentViewIndex].viewMatrix;
+                const glm::mat4& projection = m_views[m_currentViewIndex].projectionMatrix;
+                glm::vec4 clipPos = projection * view * glm::vec4(pos, 1.0f);
+                glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+                
+                logger->info("VRManager: Debug controller pose located at ({}, {}, {})", pos.x, pos.y, pos.z);
+                logger->info("VRManager: Controller NDC Position: ({}, {}, {}), w={}", ndc.x, ndc.y, ndc.z, clipPos.w);
+                if (ndc.x < -1 || ndc.x > 1 || ndc.y < -1 || ndc.y > 1) {
+                    logger->warning("VRManager: Controller is OFF-SCREEN!");
+                } else {
+                    logger->info("VRManager: Controller is ON-SCREEN (Visible Range).");
+                }
+                if (ndc.z < -1 || ndc.z > 1) {
+                    logger->warning("VRManager: Controller is CLIPPED (Z-range)!");
+                } else {
+                    logger->info("VRManager: Controller Z is VALID.");
+                }
+                loggedPose = true;
+            }
+        }
+    } else {
+        static bool loggedPoseError = false;
+        if (!loggedPoseError && logger) {
+            logger->error("VRManager: Failed to locate left controller pose for debug rendering (Result: {})", static_cast<int>(res));
+            loggedPoseError = true;
+        }
+    }
 }
 
 void VRManager::RenderOverlay3D() {
@@ -626,6 +1048,16 @@ void VRManager::RenderOverlay3D() {
         }
     }
 
+    if (m_debugHouseIndicator) {
+        static bool loggedDebugHouse = false;
+        if (!loggedDebugHouse && logger) {
+            logger->info("VRManager: Debug House Indicator active. Calling Ray and Controller renderers.");
+            loggedDebugHouse = true;
+        }
+        RenderLeftHouseRay();
+        RenderDebugController();
+    }
+
     // Restore State
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -722,6 +1154,20 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
             createAction("fly_down", "Fly Down", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionFlyDown);
             createAction("quest", "Quest", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionQuest);
             createAction("pass", "Pass", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionPass);
+            createAction("left_aim_pose", "Left Aim Pose", XR_ACTION_TYPE_POSE_INPUT, &m_actionLeftAimPose);
+
+            if (m_actionLeftAimPose != XR_NULL_HANDLE) {
+                XrActionSpaceCreateInfo actionSpaceInfo = {XR_TYPE_ACTION_SPACE_CREATE_INFO};
+                actionSpaceInfo.action = m_actionLeftAimPose;
+                actionSpaceInfo.subactionPath = m_handLeftPath;
+                actionSpaceInfo.poseInActionSpace.orientation.w = 1.0f;
+                xrCheck(m_instance, xrCreateActionSpace(m_session, &actionSpaceInfo, &m_leftAimSpace), "xrCreateActionSpace(left_aim_pose)");
+                if (m_leftAimSpace != XR_NULL_HANDLE && logger) {
+                    logger->info("VRManager: Created m_leftAimSpace for left controller.");
+                } else if (logger) {
+                    logger->error("VRManager: FAILED to create m_leftAimSpace!");
+                }
+            }
 
             // Bindings
             auto suggest = [&](const char* profile, std::vector<std::pair<XrAction, const char*>> bindings) {
@@ -757,7 +1203,8 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
                 {m_actionFlyUp, "/user/hand/right/input/squeeze/value"},
                 {m_actionFlyDown, "/user/hand/left/input/squeeze/value"},
                 {m_actionQuest, "/user/hand/left/input/thumbstick/click"},
-                {m_actionPass, "/user/hand/right/input/thumbstick/click"}
+                {m_actionPass, "/user/hand/right/input/thumbstick/click"},
+                {m_actionLeftAimPose, "/user/hand/left/input/aim/pose"}
             });
         }
 
@@ -1174,6 +1621,10 @@ void VRManager::Shutdown() {
         m_overlayLayerFBO = 0;
     }
 
+    if (m_leftAimSpace != XR_NULL_HANDLE) {
+        xrDestroySpace(m_leftAimSpace);
+        m_leftAimSpace = XR_NULL_HANDLE;
+    }
     if (m_viewSpace != XR_NULL_HANDLE) {
         xrDestroySpace(m_viewSpace);
         m_viewSpace = XR_NULL_HANDLE;

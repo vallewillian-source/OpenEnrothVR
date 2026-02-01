@@ -125,6 +125,26 @@ private:
     unsigned int m_quadShader = 0;
     void InitOverlayQuad();
     void DrawOverlayQuad();
+    void InitDebugResources();
+    void RenderDebugCircle(const glm::vec3& position, float radius = 0.05f, const glm::vec4& color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+    void RenderDebugController();
+    void RenderLeftHouseRay();
+    void InitRayResources();
+    void UpdateLeftRay();
+
+    unsigned int m_rayVAO = 0;
+    unsigned int m_rayVBO = 0;
+    unsigned int m_rayShader = 0;
+    
+    unsigned int m_debugVAO = 0;
+    unsigned int m_debugVBO = 0;
+    unsigned int m_debugShader = 0;
+    int m_debugVertexCount = 0;
+    
+    float m_leftRayLength = 5.0f;
+    bool m_leftRayValid = false;
+    glm::vec3 m_leftRayOrigin = glm::vec3(0.0f);
+    glm::vec3 m_leftRayDirection = glm::vec3(0.0f, 0.0f, -1.0f);
 
     XrInstance m_instance = XR_NULL_HANDLE;
     XrSystemId m_systemId = XR_NULL_SYSTEM_ID;
@@ -176,10 +196,12 @@ private:
     XrAction m_actionFlyDown = XR_NULL_HANDLE; // Grip Left
     XrAction m_actionQuest = XR_NULL_HANDLE; // Left Stick Click
     XrAction m_actionPass = XR_NULL_HANDLE; // Right Stick Click
+    XrAction m_actionLeftAimPose = XR_NULL_HANDLE;
     // Jump is derived from Turn (Right Thumbstick Up)
 
     XrPath m_handLeftPath = XR_NULL_PATH;
     XrPath m_handRightPath = XR_NULL_PATH;
+    XrSpace m_leftAimSpace = XR_NULL_HANDLE;
 
     // New Menu Cursor State
     float m_menuCursorX = 0.0f;
