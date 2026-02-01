@@ -408,7 +408,7 @@ class GameConfig : public Config {
 
         Bool BloodSplatsFade = {this, "bloodsplats_fade", true, "Enable bloodsplats fading."};
 
-        Float ClipFarDistance = {this, "clip_far_distance", 16192.0f, "Far clip distance."};
+        Float ClipFarDistance = {this, "clip_far_distance", 60000.0f, "Far clip distance."};
         Float ClipNearDistance = {this, "clip_near_distance", 32.0f, "Near clip distance."};
 
         Bool ColoredLights = {this, "colored_lights", true, "Enable colored lights."};

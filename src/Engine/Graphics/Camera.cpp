@@ -26,9 +26,13 @@ float Camera3D::GetNearClip() const {
 float Camera3D::GetFarClip() const {
     // The cave is one large area so we need to increase the clip distance so that the back of the cave is visible
     // TODO(pskelton): do we want to be overriding the config value here?
-    if (engine->_currentLoadedMapId == MAP_WROMTHRAXS_CAVE)
-        return 25000.0f;
-    return engine->config->graphics.ClipFarDistance.value();
+    float far_clip = engine->config->graphics.ClipFarDistance.value();
+    if (engine->_currentLoadedMapId == MAP_WROMTHRAXS_CAVE) {
+        if (far_clip < 25000.0f) {
+            return 25000.0f;
+        }
+    }
+    return far_clip;
 }
 
 bool Camera3D::ViewClip(const Vec3f& pos, Vec3f* outPos) const {
