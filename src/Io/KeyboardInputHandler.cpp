@@ -81,7 +81,7 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
             case INPUT_ACTION_QUICK_CAST: return vrInput.castReady;
             case INPUT_ACTION_JUMP: return vrInput.jump;
             case INPUT_ACTION_ESCAPE: return vrInput.esc;
-            case INPUT_ACTION_TOGGLE_TURN_BASED: return vrInput.combat;
+            case INPUT_ACTION_TOGGLE_TURN_BASED: return vrInput.combat || vrInput.simultaneousGrips;
             case INPUT_ACTION_OPEN_SPELLBOOK: return vrInput.cast;
             case INPUT_ACTION_FLY_UP: return vrInput.flyUp;
             case INPUT_ACTION_FLY_DOWN: return vrInput.flyDown;
@@ -105,7 +105,7 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
             case INPUT_ACTION_QUICK_CAST: return vrInput.castReady && !this->prevVRInput.castReady;
             case INPUT_ACTION_JUMP: return vrInput.jump && !this->prevVRInput.jump;
             case INPUT_ACTION_ESCAPE: return vrInput.esc && !this->prevVRInput.esc;
-            case INPUT_ACTION_TOGGLE_TURN_BASED: return vrInput.combat && !this->prevVRInput.combat;
+            case INPUT_ACTION_TOGGLE_TURN_BASED: return (vrInput.combat && !this->prevVRInput.combat) || (vrInput.simultaneousGrips && !this->prevVRInput.simultaneousGrips);
             case INPUT_ACTION_OPEN_SPELLBOOK: return vrInput.cast && !this->prevVRInput.cast;
             case INPUT_ACTION_FLY_UP: return vrInput.flyUp && !this->prevVRInput.flyUp;
             case INPUT_ACTION_FLY_DOWN: return vrInput.flyDown && !this->prevVRInput.flyDown;

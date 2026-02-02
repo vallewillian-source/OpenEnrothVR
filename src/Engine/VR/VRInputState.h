@@ -16,4 +16,5 @@ struct VRInputState {
     bool flyDown = false;
     bool quest = false;
     bool pass = false;
+    bool simultaneousGrips = false;
 };

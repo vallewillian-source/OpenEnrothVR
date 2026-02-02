@@ -2626,6 +2626,17 @@ VRManager::VRInputState VRManager::GetVRInputState() {
     state.cast = getActionBool(m_actionCast);
     state.flyUp = getActionFloatAsBool(m_actionFlyUp, 0.5f);
     state.flyDown = getActionFloatAsBool(m_actionFlyDown, 0.5f);
+    
+    // Check for simultaneous grips to simulate "Enter" key
+    if (state.flyUp && state.flyDown) {
+        state.simultaneousGrips = true;
+        // Suppress flying when both are pressed to avoid conflicting movement
+        state.flyUp = false;
+        state.flyDown = false;
+    } else {
+        state.simultaneousGrips = false;
+    }
+
     state.quest = getActionBool(m_actionQuest);
     state.pass = getActionBool(m_actionPass);
     
