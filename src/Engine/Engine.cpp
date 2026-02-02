@@ -247,8 +247,10 @@ void Engine::Draw() {
 
                         drawWorld();
 
-                        VRManager::Get().RenderDialogueHUD();
-                        VRManager::Get().RenderDialogueMenu();
+                        if (current_screen_type != SCREEN_HOUSE) {
+                            VRManager::Get().RenderDialogueHUD();
+                            VRManager::Get().RenderDialogueMenu();
+                        }
                         VRManager::Get().RenderOverlay3D();
 
                         VRManager::Get().SetIsRenderingVREye(false);

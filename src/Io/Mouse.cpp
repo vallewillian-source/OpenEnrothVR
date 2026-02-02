@@ -101,18 +101,34 @@ void Io::Mouse::DrawCursor() {
     if (VRManager::Get().IsInitialized()) {
         const auto dims = render->GetRenderDimensions();
         int vrX = 0, vrY = 0;
-        bool vrClick = false;
+        bool vrLeftDown = false;
+        bool vrRightDown = false;
 
         // Check if we are in VR Menu Mode
-        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrClick)) {
+        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrLeftDown, vrRightDown)) {
              // Update Mouse Position for Game Logic
              this->setPosition(Pointi(vrX, vrY));
 
-             // Handle Click
-             if (vrClick) {
-                 if (logger) logger->info("Mouse: vrClick detected. Calling UI_OnMouseLeftClick.");
+             static bool prevVrLeftDown = false;
+             static bool prevVrRightDown = false;
+
+             // Handle Left Click (Rising Edge)
+             if (vrLeftDown && !prevVrLeftDown) {
+                 if (logger) logger->info("Mouse: vrLeftClick detected.");
                  this->UI_OnMouseLeftClick();
              }
+
+             // Handle Right Click
+             if (vrRightDown && !prevVrRightDown) {
+                 if (logger) logger->info("Mouse: vrRightClick Down detected.");
+                 UI_OnMouseRightClick(Pointi(vrX, vrY));
+             } else if (!vrRightDown && prevVrRightDown) {
+                 if (logger) logger->info("Mouse: vrRightClick Up detected.");
+                 back_to_game();
+             }
+
+             prevVrLeftDown = vrLeftDown;
+             prevVrRightDown = vrRightDown;
 
              // Hide OS cursor
              platform->setCursorShown(false);

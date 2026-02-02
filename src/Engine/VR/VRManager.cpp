@@ -2273,7 +2273,7 @@ void VRManager::Shutdown() {
     }
 }
 
-bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed) {
+bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outLeftDown, bool& outRightDown) {
     static bool loggedCall = false;
     if (!loggedCall && logger) {
         logger->info("VRManager: GetMenuMouseState called.");
@@ -2282,7 +2282,8 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
 
     outX = 0;
     outY = 0;
-    outClickPressed = false;
+    outLeftDown = false;
+    outRightDown = false;
 
     const bool canUseOverlayLayer = m_overlayLayerEnabled && m_overlayLayerHasFrame;
     const bool canUseHouseOverlay = m_debugHouseIndicator;
@@ -2296,13 +2297,7 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     {
         return false;
     }
-    // m_menuAimSpaceRight is removed
-    /*
-    if (m_menuAimSpaceRight == XR_NULL_HANDLE)
-    {
-        return false;
-    }
-    */
+    
     if (menuWidth <= 0 || menuHeight <= 0)
     {
         return false;
@@ -2326,9 +2321,6 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     }
 
     // Get input from Left Stick (m_actionMove) and Left/Right Triggers (m_actionEsc/m_actionInteract)
-    const XrPath leftHandPath = (m_handLeftPath != XR_NULL_PATH) ? m_handLeftPath : XR_NULL_PATH;
-    const XrPath rightHandPath = (m_handRightPath != XR_NULL_PATH) ? m_handRightPath : XR_NULL_PATH;
-
     XrActionStateVector2f moveState = {XR_TYPE_ACTION_STATE_VECTOR2F};
     if (m_actionMove != XR_NULL_HANDLE) {
         XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
@@ -2353,27 +2345,44 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
         xrGetActionStateFloat(m_session, &getInfo, &triggerRightState);
     }
 
-    // Update Cursor Position
+    // Determine Button States
+    bool leftDown = (triggerLeftState.isActive && triggerLeftState.currentState > 0.5f);
+    bool rightDown = (triggerRightState.isActive && triggerRightState.currentState > 0.5f);
+    
+    // Output states
+    outLeftDown = leftDown;
+    outRightDown = rightDown;
+
+    // --- GUI Billboard Mode (House/Shop 2D Overlay) ---
+    if (m_showGuiBillboard) {
+        // In this mode, we enforce Raycast for Cursor Position and map Triggers directly to Mouse Buttons.
+        // We explicitly IGNORE list navigation logic (Stick Up/Down) as per user request.
+        
+        if (m_leftRayHitGUI) {
+             m_menuCursorX = m_guiHitX * menuWidth;
+             m_menuCursorY = m_guiHitY * menuHeight;
+             
+             if (logger) {
+                static bool loggedGuiRayHit = false;
+                if (!loggedGuiRayHit) {
+                    logger->info("VRManager: Ray hit GUI Billboard. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
+                    loggedGuiRayHit = true;
+                }
+            }
+        }
+        
+        // Output coordinates
+        outX = static_cast<int>(m_menuCursorX);
+        outY = static_cast<int>(m_menuCursorY);
+        return true;
+    }
+
+    // --- Standard Dialogue/Menu Mode ---
+
+    // Update Cursor Position (Standard)
     if (m_leftRayHitHouse) {
         m_menuCursorX = m_houseHitX * menuWidth;
         m_menuCursorY = m_houseHitY * menuHeight;
-        if (logger) {
-            static bool loggedRayHit = false;
-            if (!loggedRayHit) {
-                logger->info("VRManager: Ray hit house overlay. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
-                loggedRayHit = true;
-            }
-        }
-    } else if (m_leftRayHitGUI) {
-        m_menuCursorX = m_guiHitX * menuWidth;
-        m_menuCursorY = m_guiHitY * menuHeight;
-        if (logger) {
-            static bool loggedGuiRayHit = false;
-            if (!loggedGuiRayHit) {
-                logger->info("VRManager: Ray hit GUI Billboard. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
-                loggedGuiRayHit = true;
-            }
-        }
     } else if (moveState.isActive) {
         // Move X
         m_menuCursorX += moveState.currentState.x * m_menuCursorSpeed;
@@ -2397,26 +2406,7 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
         }
     }
 
-    // Check for click (Edge Detection)
-    bool pressedNow = false;
-    if ((triggerLeftState.isActive && triggerLeftState.currentState > 0.5f) || 
-        (triggerRightState.isActive && triggerRightState.currentState > 0.5f)) {
-        pressedNow = true;
-    }
-
-    if (m_waitForTriggerRelease) {
-        if (!pressedNow) {
-            m_waitForTriggerRelease = false;
-            if (logger) logger->info("VRManager: Trigger released, menu interaction enabled.");
-        }
-        outClickPressed = false;
-    } else {
-        outClickPressed = pressedNow && !m_menuSelectPressedPrev;
-    }
-    
-    m_menuSelectPressedPrev = pressedNow;
-
-    // Handle directional selection for dialogue menu
+    // Handle directional selection for dialogue menu (Legacy/NPC Dialogue)
     if (!m_dialogueOptions.empty()) {
         static bool stickReset = true;
         float stickThreshold = 0.5f;
@@ -2437,30 +2427,6 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
             inputY = turnState.currentState.y;
         }
 
-        if (logger) {
-            static int debugLogCounter = 0;
-            debugLogCounter++;
-            if (debugLogCounter > 30) { // Log a cada 0.5 segundos (60 fps)
-                logger->info("VRManager Debug: DialogueMenu ativo ({} opções). InputY: {}. MoveActive: {}. TurnActive: {}. SessionState: {}", 
-                    m_dialogueOptions.size(), inputY, moveState.isActive, turnState.isActive, (int)m_sessionState);
-                
-                if (moveState.isActive) logger->info("  Move Raw Y: {}", moveState.currentState.y);
-                if (turnState.isActive) logger->info("  Turn Raw Y: {}", turnState.currentState.y);
-                
-                // Log additional flags to see why moveState might be inactive
-                if (m_actionMove != XR_NULL_HANDLE) {
-                    XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
-                    getInfo.action = m_actionMove;
-                    getInfo.subactionPath = XR_NULL_PATH;
-                    XrActionStateVector2f moveCheck = {XR_TYPE_ACTION_STATE_VECTOR2F};
-                    xrGetActionStateVector2f(m_session, &getInfo, &moveCheck);
-                    logger->info("  Move Action State Check - Active: {}, Current: ({}, {})", moveCheck.isActive, moveCheck.currentState.x, moveCheck.currentState.y);
-                }
-
-                debugLogCounter = 0;
-            }
-        }
-
         if (inputY != 0.0f) {
             if (stickReset) {
                 if (inputY > stickThreshold) { // Up (Stick Up is positive Y in OpenXR)
@@ -2468,42 +2434,46 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
                     m_selectedOptionIndex = (m_selectedOptionIndex > 0) ? m_selectedOptionIndex - 1 : (int)m_dialogueOptions.size() - 1;
                     UpdateDialogueMenuTexture();
                     stickReset = false;
-                    if (logger) logger->info("VRManager: Menu Up via Stick (val: {}, {} -> {})", inputY, oldIndex, m_selectedOptionIndex);
                 } else if (inputY < -stickThreshold) { // Down (Stick Down is negative Y in OpenXR)
                     int oldIndex = m_selectedOptionIndex;
                     m_selectedOptionIndex = (m_selectedOptionIndex < (int)m_dialogueOptions.size() - 1) ? m_selectedOptionIndex + 1 : 0;
                     UpdateDialogueMenuTexture();
                     stickReset = false;
-                    if (logger) logger->info("VRManager: Menu Down via Stick (val: {}, {} -> {})", inputY, oldIndex, m_selectedOptionIndex);
                 }
             } else {
-                // Higher deadzone to reset stick (prevents rapid-fire on noisy sticks)
                 if (std::abs(inputY) < 0.25f) {
                     stickReset = true;
-                    // if (logger) logger->info("VRManager: Stick reset threshold reached (val: {})", inputY);
                 }
             }
         } else {
             stickReset = true;
         }
 
-        // Selection via Trigger - IMPORTANT: Check for click to send message to game
-        if (outClickPressed) {
+        // Selection via Trigger (Pulse logic for dialogue)
+        // Detect Click Pulse (Rising Edge) locally for Dialogue selection
+        bool pressedNow = leftDown || rightDown; // Any trigger selects in dialogue? Or just left? 
+        // Original code used both.
+        
+        bool clickPulse = pressedNow && !m_menuSelectPressedPrev;
+        m_menuSelectPressedPrev = pressedNow;
+
+        if (clickPulse) {
             if (m_selectedOptionIndex >= 0 && m_selectedOptionIndex < (int)m_dialogueOptions.size()) {
                 const auto& opt = m_dialogueOptions[m_selectedOptionIndex];
                 if (engine && engine->_messageQueue) {
                     engine->_messageQueue->addMessageCurrentFrame(static_cast<UIMessageType>(opt.msg), opt.id, 0);
                     if (logger) logger->info("VRManager: Option selected via directional/click: '{}' (ID: {}, Msg: {})", opt.text, opt.id, opt.msg);
                     
-                    // Consume the click to prevent Mouse.cpp from triggering a generic click at cursor position
-                    outClickPressed = false;
+                    // Consume the click to prevent Mouse.cpp from triggering generic click
+                    outLeftDown = false; 
+                    outRightDown = false;
                 }
             }
         }
-    }
-
-    if (logger && outClickPressed) {
-        logger->info("VRManager: Click Detected! (X: {}, Y: {})", m_menuCursorX, m_menuCursorY);
+    } else {
+        // Update prev state if not in dialogue (to keep state consistent)
+         bool pressedNow = leftDown || rightDown;
+         m_menuSelectPressedPrev = pressedNow;
     }
 
     outX = static_cast<int>(m_menuCursorX);

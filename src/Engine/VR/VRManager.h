@@ -88,7 +88,7 @@ public:
     void CaptureScreenToOverlayLayer(int srcWidth, int srcHeight);
     void SetOverlayLayerEnabled(bool enabled);
 
-    bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed);
+    bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outLeftDown, bool& outRightDown);
 
     VRInputState GetVRInputState();
 

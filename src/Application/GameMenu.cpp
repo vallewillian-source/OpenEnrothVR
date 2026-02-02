@@ -484,13 +484,17 @@ void Menu::MenuLoop() {
         if (shouldRenderVR) {
             int menuX = 0;
             int menuY = 0;
-            bool menuClickPressed = false;
+            bool menuLeftDown = false;
+            bool menuRightDown = false;
             const auto dims = render->GetRenderDimensions();
-            if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuClickPressed)) {
+            if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuLeftDown, menuRightDown)) {
                 mouse->setPosition({menuX, menuY});
-                if (menuClickPressed) {
+                
+                static bool prevMenuLeftDown = false;
+                if (menuLeftDown && !prevMenuLeftDown) {
                     mouse->UI_OnMouseLeftClick();
                 }
+                prevMenuLeftDown = menuLeftDown;
             }
         }
 
