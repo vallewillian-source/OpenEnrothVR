@@ -177,6 +177,7 @@ private:
     float m_leftRayLength = 5.0f;
     bool m_leftRayValid = false;
     bool m_leftRayHitHouse = false;
+    bool m_leftRayHitGUI = false;
     glm::vec3 m_leftRayHitPos = glm::vec3(0.0f);
     float m_houseHitX = 0.0f;
     float m_houseHitY = 0.0f;

@@ -1042,6 +1042,7 @@ void VRManager::UpdateLeftRay() {
 
     // Check intersection with House Overlay
     m_leftRayHitHouse = false;
+    m_leftRayHitGUI = false;
     m_leftRayLength = 10.0f; // Reset length
 
     if (m_housePoseInitialized && m_debugHouseIndicator) {
@@ -1080,6 +1081,45 @@ void VRManager::UpdateLeftRay() {
                     if (!loggedHit && logger) {
                         logger->info("VRManager: Ray Hit House Overlay at dist {}, local({},{})", t, localHit.x, localHit.y);
                         loggedHit = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Check intersection with GUI Billboard
+    if (m_showGuiBillboard && m_guiBillboardPoseInitialized) {
+        glm::vec3 planeNormal = m_guiBillboardWorldRot * glm::vec3(0.0f, 0.0f, 1.0f); // Face towards camera (Z+)
+        float denom = glm::dot(m_leftRayDirection, planeNormal);
+        
+        // Ray should hit the front face (denom < 0)
+        if (denom < -0.0001f) {
+            float t = glm::dot(m_guiBillboardWorldPos - m_leftRayOrigin, planeNormal) / denom;
+            if (t > 0.0f && t < m_leftRayLength) { // Only if closer than previous hit (house)
+                glm::vec3 hitPoint = m_leftRayOrigin + m_leftRayDirection * t;
+                
+                // Transform to local space of the plane to check bounds
+                glm::vec3 localHit = glm::inverse(m_guiBillboardWorldRot) * (hitPoint - m_guiBillboardWorldPos);
+                
+                // Check bounds (1.2m width, 1.2/1.333 height)
+                float width = 1.2f;
+                float height = 1.2f / 1.333f;
+                float halfW = width * 0.5f;
+                float halfH = height * 0.5f;
+                
+                if (localHit.x >= -halfW && localHit.x <= halfW &&
+                        localHit.y >= -halfH && localHit.y <= halfH) {
+                    
+                        m_leftRayHitGUI = true;
+                        m_leftRayHitHouse = false; // Override house hit
+                        m_leftRayHitPos = hitPoint;
+                        m_leftRayLength = t;
+                        
+                        // Optional: Log hit once
+                    static bool loggedGuiHit = false;
+                    if (!loggedGuiHit && logger) {
+                        logger->info("VRManager: Ray Hit GUI Billboard at dist {}, local({},{})", t, localHit.x, localHit.y);
+                        loggedGuiHit = true;
                     }
                 }
             }
@@ -1152,7 +1192,7 @@ void VRManager::RenderLeftHouseRay() {
     glEnable(GL_DEPTH_TEST);
 
     // If hit, draw a cursor at the intersection point
-    if (m_leftRayHitHouse) {
+    if (m_leftRayHitHouse || m_leftRayHitGUI) {
         RenderDebugCircle(m_leftRayHitPos, 0.015f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red cursor
     }
 }
@@ -1578,11 +1618,12 @@ void VRManager::RenderOverlay3D() {
         }
     }
 
-    if (m_debugHouseIndicator) {
-        static bool loggedDebugHouse = false;
-        if (!loggedDebugHouse && logger) {
-            logger->info("VRManager: Debug House Indicator active. Calling Ray and Controller renderers.");
-            loggedDebugHouse = true;
+    if (m_debugHouseIndicator || m_showGuiBillboard) {
+        static bool loggedRayRender = false;
+        if (!loggedRayRender && logger) {
+            logger->info("VRManager: Ray active (House: {}, GUI: {}). Calling Ray and Controller renderers.", 
+                         m_debugHouseIndicator, m_showGuiBillboard);
+            loggedRayRender = true;
         }
         RenderLeftHouseRay();
         RenderDebugController();
