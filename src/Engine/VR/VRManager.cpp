@@ -2643,5 +2643,21 @@ VRManager::VRInputState VRManager::GetVRInputState() {
     // Jump: Right Stick Up (Turn Y > 0.5)
     state.jump = state.turnY > 0.5f;
 
+    // Calculate Head Pitch from first view (Left Eye/Head)
+    if (!m_xrViews.empty()) {
+        const auto& orient = m_xrViews[0].pose.orientation;
+        glm::quat q(orient.w, orient.x, orient.y, orient.z);
+        // OpenXR: Forward is -Z.
+        // Get forward vector direction
+        glm::vec3 forward = q * glm::vec3(0.0f, 0.0f, -1.0f);
+        // Pitch is the angle of forward vector with the horizontal plane (XZ).
+        // Since Y is Up, pitch is asin(forward.y).
+        // forward.y > 0 means looking up (positive pitch).
+        // forward.y < 0 means looking down (negative pitch).
+        state.headPitch = std::asin(std::clamp(forward.y, -1.0f, 1.0f));
+    } else {
+        state.headPitch = 0.0f;
+    }
+
     return state;
 }

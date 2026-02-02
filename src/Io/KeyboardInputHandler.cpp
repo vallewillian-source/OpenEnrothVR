@@ -66,6 +66,37 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
     if (VRManager::Get().IsInitialized() && VRManager::Get().IsSessionRunning()) {
         vrInput = VRManager::Get().GetVRInputState();
         vrActive = true;
+
+        // Head Pitch Logic (Look Up/Down/Center)
+        static int currentLookState = 0; // 0=Center, 1=Up, -1=Down
+        float pitchDeg = vrInput.headPitch * 57.2958f; // Rad to Deg
+
+        // Thresholds
+        const float UP_THRESHOLD = 25.0f;     // Angle to trigger LookUp
+        const float DOWN_THRESHOLD = -25.0f;  // Angle to trigger LookDown
+        const float CENTER_LIMIT = 15.0f;     // Angle to return to Center (Hysteresis)
+
+        if (currentLookState == 0) { // Currently Center
+            if (pitchDeg > UP_THRESHOLD) {
+                currentLookState = 1; // Up
+                pPartyActionQueue->Add(PARTY_LookUp);
+                pPartyActionQueue->Add(PARTY_LookUp);
+            } else if (pitchDeg < DOWN_THRESHOLD) {
+                currentLookState = -1; // Down
+                pPartyActionQueue->Add(PARTY_LookDown);
+                pPartyActionQueue->Add(PARTY_LookDown);
+            }
+        } else if (currentLookState == 1) { // Currently Up
+            if (pitchDeg < CENTER_LIMIT) {
+                currentLookState = 0; // Back to Center
+                pPartyActionQueue->Add(PARTY_CenterView);
+            }
+        } else if (currentLookState == -1) { // Currently Down
+            if (pitchDeg > -CENTER_LIMIT) {
+                currentLookState = 0; // Back to Center
+                pPartyActionQueue->Add(PARTY_CenterView);
+            }
+        }
     }
 
     auto isVRDown = [&](InputAction action) -> bool {

@@ -17,4 +17,5 @@ struct VRInputState {
     bool quest = false;
     bool pass = false;
     bool simultaneousGrips = false;
+    float headPitch = 0.0f; // Radians, positive up or down TBD
 };
