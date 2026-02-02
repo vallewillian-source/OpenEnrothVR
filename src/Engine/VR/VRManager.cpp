@@ -415,6 +415,7 @@ void VRManager::RenderDialogueMenu() {
         
         glm::mat4 menuModel = glm::scale(model, glm::vec3(panelWidth, panelHeight, 1.0f));
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &menuModel[0][0]);
+        glUniform4f(glGetUniformLocation(m_quadShader, "color"), 1.0f, 1.0f, 1.0f, 1.0f);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_dialogueMenuTexture);
@@ -431,7 +432,7 @@ void VRManager::RenderDialogueMenu() {
 }
 
 void VRManager::RenderMinimalCharacterHUD() {
-    if (!pParty || current_screen_type != SCREEN_GAME || m_showGuiBillboard) return;
+    if (!pParty || current_screen_type != SCREEN_GAME || m_showGuiBillboard || !m_showMinimalHUD) return;
 
     GLboolean prevBlend, prevDepthTest, prevCullFace, prevScissor;
     glGetBooleanv(GL_BLEND, &prevBlend);
@@ -464,13 +465,12 @@ void VRManager::RenderMinimalCharacterHUD() {
     glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
     glm::vec3 camRight = glm::vec3(invView * glm::vec4(1, 0, 0, 0));
 
-    // Base position: 1.5m away, lower part of screen
-    glm::vec3 basePos = camPos + camFwd * 1.5f - camUp * 0.35f; 
+    // Base position: 1.5m away, Bottom Right
+    // Adjusted to align bottom right (approximate values, can be tuned)
+    glm::vec3 basePos = camPos + camFwd * 1.5f + camRight * 0.8f - camUp * 0.5f; 
     
-    // Width of total HUD area approx 1.0m?
-    // 4 characters. Spacing 0.25m.
-    // Offsets: -0.375, -0.125, +0.125, +0.375
-    float offsets[] = {-0.375f, -0.125f, 0.125f, 0.375f};
+    // Closer offsets (approx 0.15 spacing - Reverted size requires more space than 0.11 but less than original 0.25)
+    float offsets[] = {-0.225f, -0.075f, 0.075f, 0.225f};
     
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -485,6 +485,9 @@ void VRManager::RenderMinimalCharacterHUD() {
     glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+    // 80% Opacity
+    glUniform4f(glGetUniformLocation(m_quadShader, "color"), 1.0f, 1.0f, 1.0f, 0.8f);
+
     glBindVertexArray(m_quadVAO);
 
     for (int i = 0; i < 4; ++i) {
@@ -507,7 +510,7 @@ void VRManager::RenderMinimalCharacterHUD() {
         
         glm::vec3 charPos = basePos + camRight * offsets[i];
         
-        // Draw Face
+        // Draw Face - Reverted size
         float faceScale = 0.0015f; 
         float w = pPortrait->width() * faceScale;
         float h = pPortrait->height() * faceScale;
@@ -532,8 +535,8 @@ void VRManager::RenderMinimalCharacterHUD() {
             else if (hpRatio <= 0.5) pBarTex = game_ui_bar_yellow;
             
             if (pBarTex && pBarTex->renderId().isValid()) {
-                 float barW = 0.015f; // Thin bar
-                 float barH = h; // Same height as face
+                 float barW = 0.015f; // Reverted width
+                 float barH = h; 
                  
                  glm::vec3 barPos = charPos - camRight * (w/2.0f + barW/2.0f + 0.005f);
                  
@@ -562,7 +565,7 @@ void VRManager::RenderMinimalCharacterHUD() {
             
             GraphicsImage* pBarTex = game_ui_bar_blue;
             if (pBarTex && pBarTex->renderId().isValid()) {
-                 float barW = 0.015f;
+                 float barW = 0.015f; // Reverted width
                  float barH = h;
                  
                  glm::vec3 barPos = charPos + camRight * (w/2.0f + barW/2.0f + 0.005f);
@@ -707,6 +710,7 @@ void VRManager::RenderTurnBasedHUD() {
         
         glm::mat4 quadModel = glm::scale(model, glm::vec3(w, h, 1.0f));
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &quadModel[0][0]);
+        glUniform4f(glGetUniformLocation(m_quadShader, "color"), 1.0f, 1.0f, 1.0f, 1.0f);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureId);
@@ -1013,12 +1017,13 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D screenTexture;
+uniform vec4 color;
 
 void main() {
     vec4 col = texture(screenTexture, TexCoord);
     // Simple alpha threshold if needed, or rely on blending
     // if (col.a < 0.01) discard;
-    FragColor = col;
+    FragColor = col * color;
 }
 )";
 
@@ -1713,6 +1718,7 @@ void VRManager::RenderDialogueHUD() {
         
         glm::mat4 textModel = glm::scale(model, glm::vec3(panelWidth, panelHeight, 1.0f));
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &textModel[0][0]);
+        glUniform4f(glGetUniformLocation(m_quadShader, "color"), 1.0f, 1.0f, 1.0f, 1.0f);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_dialogueFontTexture);
@@ -1821,6 +1827,7 @@ void VRManager::RenderOverlay3D() {
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
         glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
+        glUniform4f(glGetUniformLocation(m_quadShader, "color"), 1.0f, 1.0f, 1.0f, 1.0f);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
@@ -2273,6 +2280,44 @@ bool VRManager::BeginFrame() {
                 } else {
                     m_guiBillboardButtonPressedPrev = false;
                 }
+            }
+        }
+
+        // Toggle Minimal HUD with BOTH Triggers (Left + Right)
+        if (m_actionEsc != XR_NULL_HANDLE && m_actionInteract != XR_NULL_HANDLE) {
+            bool leftPressed = false;
+            bool rightPressed = false;
+
+            // Check Left Trigger (Esc)
+            XrActionStateGetInfo getInfoL = {XR_TYPE_ACTION_STATE_GET_INFO};
+            getInfoL.action = m_actionEsc;
+            XrActionStateFloat floatStateL = {XR_TYPE_ACTION_STATE_FLOAT};
+            if (XR_SUCCEEDED(xrGetActionStateFloat(m_session, &getInfoL, &floatStateL))) {
+                if (floatStateL.isActive && floatStateL.currentState > 0.8f) { // High threshold for deliberate press
+                    leftPressed = true;
+                }
+            }
+
+            // Check Right Trigger (Interact)
+            XrActionStateGetInfo getInfoR = {XR_TYPE_ACTION_STATE_GET_INFO};
+            getInfoR.action = m_actionInteract;
+            XrActionStateFloat floatStateR = {XR_TYPE_ACTION_STATE_FLOAT};
+            if (XR_SUCCEEDED(xrGetActionStateFloat(m_session, &getInfoR, &floatStateR))) {
+                if (floatStateR.isActive && floatStateR.currentState > 0.8f) {
+                    rightPressed = true;
+                }
+            }
+
+            if (leftPressed && rightPressed) {
+                if (!m_minimalHUDTogglePressedPrev) {
+                    m_showMinimalHUD = !m_showMinimalHUD;
+                    if (logger) {
+                        logger->info("VRManager: Minimal HUD toggled to {}", m_showMinimalHUD);
+                    }
+                }
+                m_minimalHUDTogglePressedPrev = true;
+            } else {
+                m_minimalHUDTogglePressedPrev = false;
             }
         }
     }

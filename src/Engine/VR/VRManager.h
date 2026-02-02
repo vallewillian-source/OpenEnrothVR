@@ -254,6 +254,10 @@ private:
     bool m_guiBillboardButtonPressedPrev = false;
     bool m_waitForTriggerRelease = false;
 
+    // Minimal HUD State
+    bool m_showMinimalHUD = false;
+    bool m_minimalHUDTogglePressedPrev = false;
+
     // Dialogue HUD
     std::string m_dialogueText;
     unsigned int m_dialogueFontTexture = 0; // Future use if we want a dedicated font

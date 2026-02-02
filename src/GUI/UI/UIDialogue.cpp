@@ -255,6 +255,7 @@ void GUIWindow_Dialogue::Update() {
 
     // Message window
     pDialogueWindow->DrawDialoguePanel(dialogue_string);
+    VRManager::Get().SetDialogueText(dialogue_string);
 
     // Right panel(Правая панель)-------
     for (int i = pDialogueWindow->pStartingPosActiveItem; i < pDialogueWindow->pStartingPosActiveItem + pDialogueWindow->pNumPresenceButton; ++i) {
