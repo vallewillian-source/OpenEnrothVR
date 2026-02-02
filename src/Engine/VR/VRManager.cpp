@@ -1101,9 +1101,9 @@ void VRManager::UpdateLeftRay() {
                 // Transform to local space of the plane to check bounds
                 glm::vec3 localHit = glm::inverse(m_guiBillboardWorldRot) * (hitPoint - m_guiBillboardWorldPos);
                 
-                // Check bounds (1.2m width, 1.2/1.333 height)
+                // Check bounds (1.2m width, 0.9m height)
                 float width = 1.2f;
-                float height = 1.2f / 1.333f;
+                float height = 0.9f;
                 float halfW = width * 0.5f;
                 float halfH = height * 0.5f;
                 
@@ -1505,8 +1505,10 @@ void VRManager::RenderOverlay3D() {
         // Construct Model Matrix from saved world pose
         glm::mat4 model = glm::mat4_cast(m_guiBillboardWorldRot);
         model[3] = glm::vec4(m_guiBillboardWorldPos, 1.0f);
-        // Scaling to match a reasonable screen size (e.g. 1.2m width)
-        model = glm::scale(model, glm::vec3(1.2f, 1.2f / 1.333f, 1.0f));
+        // Scaling to match a 4:3 aspect ratio (1.2m width, 0.9m height)
+        // Note: Quad vertices are +/- 0.5 (width 1.0) and +/- 0.375 (height 0.75)
+        // To get 1.2m width: scale by 1.2. To get 0.9m height: 0.75 * 1.2 = 0.9.
+        model = glm::scale(model, glm::vec3(1.2f, 1.2f, 1.0f));
 
         // Render State Setup
         glEnable(GL_BLEND);
