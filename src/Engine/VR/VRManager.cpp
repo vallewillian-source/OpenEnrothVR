@@ -1115,6 +1115,10 @@ void VRManager::UpdateLeftRay() {
                         m_leftRayHitPos = hitPoint;
                         m_leftRayLength = t;
                         
+                        // Calculate normalized screen coordinates (0..1)
+                        m_guiHitX = (localHit.x / width) + 0.5f;
+                        m_guiHitY = 0.5f - (localHit.y / height);
+                        
                         // Optional: Log hit once
                     static bool loggedGuiHit = false;
                     if (!loggedGuiHit && logger) {
@@ -1956,6 +1960,9 @@ bool VRManager::BeginFrame() {
                 if (boolState.isActive && boolState.currentState) {
                     if (!m_guiBillboardButtonPressedPrev) {
                         m_showGuiBillboard = !m_showGuiBillboard;
+                        if (m_showGuiBillboard) {
+                            m_waitForTriggerRelease = true; // Prevent accidental clicks when opening
+                        }
                         if (logger) {
                             logger->info("VRManager: GUI Billboard toggled to {}", m_showGuiBillboard);
                         }
@@ -2277,9 +2284,10 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
 
     const bool canUseOverlayLayer = m_overlayLayerEnabled && m_overlayLayerHasFrame;
     const bool canUseHouseOverlay = m_debugHouseIndicator;
+    const bool canUseGuiBillboard = m_showGuiBillboard;
     const bool hasDialogue = !m_dialogueOptions.empty();
 
-    if (!canUseOverlayLayer && !canUseHouseOverlay && !hasDialogue) {
+    if (!canUseOverlayLayer && !canUseHouseOverlay && !hasDialogue && !canUseGuiBillboard) {
         return false;
     }
     if (m_session == XR_NULL_HANDLE || !m_sessionRunning)
@@ -2352,6 +2360,16 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
             if (!loggedRayHit) {
                 logger->info("VRManager: Ray hit house overlay. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
                 loggedRayHit = true;
+            }
+        }
+    } else if (m_leftRayHitGUI) {
+        m_menuCursorX = m_guiHitX * menuWidth;
+        m_menuCursorY = m_guiHitY * menuHeight;
+        if (logger) {
+            static bool loggedGuiRayHit = false;
+            if (!loggedGuiRayHit) {
+                logger->info("VRManager: Ray hit GUI Billboard. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
+                loggedGuiRayHit = true;
             }
         }
     } else if (moveState.isActive) {
