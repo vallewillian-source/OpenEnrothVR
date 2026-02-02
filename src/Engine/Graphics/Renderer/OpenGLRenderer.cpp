@@ -1461,25 +1461,27 @@ void OpenGLRenderer::DrawOutdoorSky() {
         // VR Sky Rendering - World Locked Cylinder
         if (VRManager::Get().IsSessionRunning()) {
             GLboolean prevDepthMask;
+            GLboolean prevCullFace;
             glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
+            glGetBooleanv(GL_CULL_FACE, &prevCullFace);
             glDepthMask(GL_FALSE);
+            glDisable(GL_CULL_FACE);
 
             _set_3d_projection_matrix();
             _set_3d_modelview_matrix();
 
-            float radius = pCamera3D->GetFarClip() * 0.9f;
-            float height = radius * 0.5f; // Adjust height to cover FOV
-            float yCenter = (float)pCamera3D->vCameraPos.y;
-            // Lower the sky relative to camera to simulate horizon? 
-            // Original code calculates horizon_height_offset. 
-            // For a cylinder at infinity, we can just center on camera Y or slightly offset.
-            // Let's center on camera Y for now.
-
-            int segments = 32;
+            float farClip = pCamera3D->GetFarClip();
+            float radius = farClip * 0.5f; // Use 0.5 to ensure corners (1.414 * 0.5 = 0.707) are within farClip
+            float height = radius;
+            float centerX = (float)pParty->pos.x;
+            float centerY = (float)pParty->pos.y;
+            float zCenter = (float)pParty->pos.z + (float)pParty->eyeLevel;
+            
+            int segments = 64; // Smoother circle
             float angleStep = (2.0f * 3.14159f) / segments;
             
             // Texture scrolling animation
-            float timeU = pMiscTimer->time().realtimeMillisecondsFloat() / 40000.0f; // Slow scroll
+            float timeU = pMiscTimer->time().realtimeMillisecondsFloat() / 60000.0f; // Even slower
 
             Colorf uTint = GetActorTintColor(dimming_level, 0, radius, 1, 0).toColorf();
             float texid = (float)pOutdoor->sky_texture->renderId().value();
@@ -1488,48 +1490,88 @@ void OpenGLRenderer::DrawOutdoorSky() {
                 float a1 = i * angleStep;
                 float a2 = (i + 1) * angleStep;
 
-                float x1 = cos(a1) * radius + (float)pCamera3D->vCameraPos.x;
-                float z1 = sin(a1) * radius + (float)pCamera3D->vCameraPos.z;
-                float x2 = cos(a2) * radius + (float)pCamera3D->vCameraPos.x;
-                float z2 = sin(a2) * radius + (float)pCamera3D->vCameraPos.z;
+                // Circle in XY plane (Z is Up in MM7)
+                float x1 = cos(a1) * radius + centerX;
+                float y1 = sin(a1) * radius + centerY;
+                float x2 = cos(a2) * radius + centerX;
+                float y2 = sin(a2) * radius + centerY;
 
                 float u1 = (float)i / segments + timeU;
                 float u2 = (float)(i + 1) / segments + timeU;
 
-                float yTop = yCenter + height;
-                float yBot = yCenter - height;
+                // Height extends along Z axis
+                float zTop = zCenter + height;
+                float zBot = zCenter - height;
 
-                // Triangle 1
+                // Triangle 1 (Wall)
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x1, yTop, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x1, y1, zTop); v.w = 1.0f; v.texuv = Vec2f(u1, 0.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
                 }
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x1, yBot, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x1, y1, zBot); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
                 }
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x2, yTop, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x2, y2, zTop); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
                 }
 
-                // Triangle 2
+                // Triangle 2 (Wall)
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x1, yBot, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x1, y1, zBot); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
                 }
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x2, yBot, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x2, y2, zBot); v.w = 1.0f; v.texuv = Vec2f(u2, 1.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
                 }
                 {
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x2, yTop, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                    v.pos = Vec3f(x2, y2, zTop); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = 0.0f; v.color = uTint; v.texid = texid;
+                }
+
+                // Top Cap (Lid) - Connects top ring to center zenith point
+                // We use a dedicated V value (0.05) for the ring and 0.0 for the center 
+                // to give some texture detail to the cap and avoid black border artifacts.
+                {
+                    // Center Point (Zenith)
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(centerX, centerY, zTop); 
+                    v.w = 1.0f; 
+                    v.texuv = Vec2f((u1 + u2) * 0.5f, 0.0f); 
+                    v.texw = 1.0f; 
+                    v.screenspace = 0.0f; 
+                    v.color = uTint; 
+                    v.texid = texid;
+                }
+                {
+                    // Ring Point 2
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x2, y2, zTop); 
+                    v.w = 1.0f; 
+                    v.texuv = Vec2f(u2, 0.1f); 
+                    v.texw = 1.0f; 
+                    v.screenspace = 0.0f; 
+                    v.color = uTint; 
+                    v.texid = texid;
+                }
+                {
+                    // Ring Point 1
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x1, y1, zTop); 
+                    v.w = 1.0f; 
+                    v.texuv = Vec2f(u1, 0.1f); 
+                    v.texw = 1.0f; 
+                    v.screenspace = 0.0f; 
+                    v.color = uTint; 
+                    v.texid = texid;
                 }
             }
 
             DrawForcePerVerts();
             glDepthMask(prevDepthMask);
+            if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
             return;
         }
 
