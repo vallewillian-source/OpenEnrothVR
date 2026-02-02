@@ -250,6 +250,7 @@ void Engine::Draw() {
                         if (current_screen_type != SCREEN_HOUSE) {
                             VRManager::Get().RenderDialogueHUD();
                             VRManager::Get().RenderDialogueMenu();
+                            VRManager::Get().RenderTurnBasedHUD();
                         }
                         VRManager::Get().RenderOverlay3D();
 

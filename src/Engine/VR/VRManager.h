@@ -117,6 +117,7 @@ public:
 
     void RenderDialogueHUD();
     void RenderDialogueMenu();
+    void RenderTurnBasedHUD();
 
 private:
     void UpdateDialogueTexture();

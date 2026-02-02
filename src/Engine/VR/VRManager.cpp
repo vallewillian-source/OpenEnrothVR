@@ -18,6 +18,7 @@
 #include "Engine/AssetsManager.h"
 #include "Engine/Graphics/Renderer/Renderer.h"
 #include "Engine/Graphics/Image.h"
+#include "Engine/Graphics/TurnBasedOverlay.h"
 #include "GUI/GUIFont.h"
 #include "GUI/GUIEnums.h"
 #include "Engine/Graphics/Camera.h"
@@ -419,6 +420,145 @@ void VRManager::RenderDialogueMenu() {
 
         glBindVertexArray(m_quadVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
+
+    if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+}
+
+void VRManager::RenderTurnBasedHUD() {
+    static bool loggedTurnBasedActive = false;
+
+    if (!turnBasedOverlay.IsActive()) {
+        if (loggedTurnBasedActive && logger) {
+             logger->info("VRManager: TurnBasedOverlay deactivated.");
+             loggedTurnBasedActive = false;
+        }
+        return;
+    }
+    
+    if (!loggedTurnBasedActive && logger) {
+        logger->info("VRManager: TurnBasedOverlay active. Attempting to render HUD.");
+        loggedTurnBasedActive = true;
+    }
+
+    GraphicsImage* icon = turnBasedOverlay.currentIcon();
+    if (!icon) {
+        if (logger) logger->warning("VRManager: TurnBasedOverlay active but no icon!");
+        return;
+    }
+    
+    unsigned int textureId = (unsigned int)icon->renderId().value();
+    if (textureId == 0) {
+        static bool loggedInvalidTex = false;
+        if (!loggedInvalidTex && logger) {
+            logger->warning("VRManager: TurnBasedOverlay icon has invalid texture ID!");
+            loggedInvalidTex = true;
+        }
+        return;
+    }
+
+    GLboolean prevBlend, prevDepthTest, prevCullFace, prevScissor;
+    glGetBooleanv(GL_BLEND, &prevBlend);
+    glGetBooleanv(GL_DEPTH_TEST, &prevDepthTest);
+    glGetBooleanv(GL_CULL_FACE, &prevCullFace);
+    glGetBooleanv(GL_SCISSOR_TEST, &prevScissor);
+
+    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f;
+    
+    glm::mat4 hudProjection(0.0f);
+    hudProjection[0][0] = 2.0f / (right - left);
+    hudProjection[1][1] = 2.0f / (up - down);
+    hudProjection[2][0] = (right + left) / (right - left);
+    hudProjection[2][1] = (up + down) / (up - down);
+    hudProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    hudProjection[2][3] = -1.0f;
+    hudProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+
+    glm::mat4 invView = glm::inverse(view);
+    glm::vec3 camPos = glm::vec3(invView[3]);
+    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+    glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
+    glm::vec3 camRight = glm::vec3(invView * glm::vec4(1, 0, 0, 0));
+
+    // Position: Top Right relative to view
+    // 1.5m away
+    // 0.4m right
+    // 0.3m up
+    glm::vec3 hudPos = camPos + camFwd * 1.5f + camRight * 0.4f + camUp * 0.3f;
+
+    // Scale
+    float scale = 0.002f; // Adjust size
+    float w = icon->width() * scale;
+    float h = icon->height() * scale;
+
+    // Billboard rotation (facing camera)
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, hudPos);
+    
+    // Extract rotation from view matrix inverse (camera rotation)
+    // We want the quad to face the camera, so it should have the same rotation as the camera
+    // (Camera looks down -Z, Quad faces +Z? No, Quad usually faces +Z or -Z defined in InitOverlayQuad)
+    // InitOverlayQuad defines vertices at Z=0.
+    // If we apply camera rotation to it, it will be aligned with camera view plane.
+    
+    // Construct rotation matrix from camera basis vectors
+    // camRight, camUp, -camFwd are the basis vectors of the camera in world space.
+    // We want the quad X to align with camRight, Y with camUp, Z with -camFwd (so it faces +Z which is towards camera? Wait).
+    // Standard Quad (InitOverlayQuad) is usually drawn in XY plane.
+    // If we rotate it to match camera orientation, it will face the camera (if we orient it correctly).
+    // invView rotation part does exactly that.
+    
+    glm::mat4 rotation = glm::mat4(glm::mat3(invView));
+    model = model * rotation;
+
+    // Flip Y scale to correct upside-down icon
+    model = glm::scale(model, glm::vec3(1.0f, -1.0f, 1.0f));
+
+    static bool loggedHudPos = false;
+    if (!loggedHudPos && logger) {
+        glm::vec4 clipPos = hudProjection * view * glm::vec4(hudPos, 1.0f);
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        logger->info("VRManager: RenderTurnBasedHUD iconId={}, size={}x{} (scaled {}x{}), HUD NDC=({}, {}, {}), w={}",
+                     textureId, icon->width(), icon->height(), w, h, ndc.x, ndc.y, ndc.z, clipPos.w);
+        loggedHudPos = true;
+    }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
+    InitOverlayQuad(); 
+    if (m_quadShader != 0 && m_quadVAO != 0) {
+        glUseProgram(m_quadShader);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
+        
+        glm::mat4 quadModel = glm::scale(model, glm::vec3(w, h, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &quadModel[0][0]);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR && logger) {
+            logger->error("VRManager: RenderTurnBasedHUD gl error: 0x{:x}", err);
+        }
     }
 
     if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);

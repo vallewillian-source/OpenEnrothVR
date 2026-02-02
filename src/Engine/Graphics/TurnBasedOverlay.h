@@ -31,8 +31,8 @@ class TurnBasedOverlay {
      */
     void draw();
 
- private:
     GraphicsImage *currentIcon() const;
+    bool IsActive() const { return _state != TURN_BASED_OVERLAY_NONE; }
 
  private:
     TurnBasedOverlayState _state = TURN_BASED_OVERLAY_NONE;
