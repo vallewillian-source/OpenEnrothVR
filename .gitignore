@@ -10,6 +10,7 @@ Build/Visual Studio 2017/Debug
 *.pcx
 build/
 mm7_data/
+mm7_data_bkp/
 
 # Visual Studio Code
 .vscode
