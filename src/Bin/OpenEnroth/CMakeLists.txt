@@ -16,6 +16,7 @@ if(OE_BUILD_PLATFORM STREQUAL "android")
 else()
     if (WIN32)
         add_executable(OpenEnroth ${BIN_OPENENROTH_HEADERS} ${BIN_OPENENROTH_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/OpenEnroth.rc)
+        set_target_properties(OpenEnroth PROPERTIES OUTPUT_NAME "OpenEnrothVR")
 
         install(TARGETS OpenEnroth)
     elseif(APPLE)

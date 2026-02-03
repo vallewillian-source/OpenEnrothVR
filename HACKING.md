@@ -57,7 +57,7 @@ You can also select platform dependent [generator](https://cmake.org/cmake/help/
   * or add Microsoft one (that's coming with the VS installation) to your PATH environment variable (e.g `c:\Program Files\Microsoft Visual Studio\2022\<edition>\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`). 
 * Open the folder in Visual Studio.
 * Select build configuration (x32 or x64) and wait for CMake configuration to complete.
-* Select startup item as `OpenEnroth.exe`.
+* Select startup item as `OpenEnrothVR.exe`.
 * Run!
 
 If you wish you can also disable prebuilt dependencies by turning off `OE_USE_PREBUILT_DEPENDENCIES` cmake option and pass your own dependencies source, e.g. via [vcpkg](https://github.com/microsoft/vcpkg) integration.

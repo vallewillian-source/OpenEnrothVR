@@ -7,7 +7,7 @@ cmake_policy(SET CMP0144 NEW)
 # to work. Note that for the binaries we're still getting debug info in .pdb files.
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
 
-project("OpenEnroth")
+project("OpenEnroth" VERSION 0.1)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -1,15 +1,27 @@
-# Might and Magic 7 VR Mod (OpenEnroth)
+# Might and Magic 7 VR Mod (OpenEnroth) - v0.1
 
-Fork of OpenEnroth adding Virtual Reality support for **Might and Magic VII** using **OpenXR**.
+This mod adds Virtual Reality support to **Might and Magic VII** using **OpenXR**.
+
+## 🚀 Quick Start (Download & Play)
+If you just want to play the game in VR, follow these simple steps:
+
+1. **Download**: Get the latest `OpenEnrothVR.exe` from the [bin/](bin/) folder.
+2. **Install**: Copy `OpenEnrothVR.exe` into your **Might and Magic VII** installation folder (the one containing the `DATA`, `ANIMS`, and `SOUNDS` folders).
+3. **VR Setup**:
+   - Ensure you have a VR headset connected (Meta Quest, Valve Index, etc.).
+   - Start **SteamVR** (or your preferred OpenXR runtime).
+4. **Play**: Run `OpenEnrothVR.exe` from your game folder.
+
+---
 
 ## Current Status: MVP
-- **3DOF tracking**: HMD orientation controls camera.
+- **6DOF tracking**: HMD orientation controls camera.
 - **Stereoscopic rendering**: full 3D world for both eyes.
 - **Input**: VR controllers or keyboard/mouse.
 - **Engine**: OpenEnroth (modern C++ reimplementation of MM7).
 - **Backend**: OpenXR (SteamVR, Oculus/Meta, WMR).
 
-**Note**: Early development. HUD is hidden in VR to avoid artifacts. Positional tracking (6DOF) not implemented.
+**Note**: Playable, but developing quality of life features.
 
 ---
 
@@ -50,8 +62,8 @@ IDEs tested: VS 2022+, VS Code 2022+, CLion 2022+.
 ## Build (VR)
 1. Clone:
    ```bash
-   git clone https://github.com/vallewillian-source/mm7_vr.git
-   cd mm7_vr
+   git clone https://github.com/vallewillian-source/open-enroth-vr.git
+   cd open-enroth-vr
    ```
 2. Configure:
    ```bash
@@ -64,13 +76,13 @@ IDEs tested: VS 2022+, VS Code 2022+, CLion 2022+.
    ```bash
    cmake --build . --config Release
    ```
-4. Install: copy `OpenEnroth.exe` to your MM7 folder (where `DATA` is).
+4. Install: copy `OpenEnrothVR.exe` (found in `build/src/Bin/OpenEnroth/Release/`) to your MM7 folder (where `DATA` is).
 
 ---
 
 ## Run (SteamVR)
 1. Start SteamVR.
-2. Run `OpenEnroth.exe`.
+2. Run `OpenEnrothVR.exe`.
 3. If headset is black, set SteamVR as default OpenXR runtime:
    `SteamVR Settings > Developer > Set SteamVR as OpenXR Runtime`.
 
@@ -156,12 +168,12 @@ Prebuilt dependencies are used by default and resolved during CMake.
 
 ---
 
-## Building on Windows
+## Build on Windows
 - Install Git and Visual Studio 2022.
 - Windows SDK v10.0.20348.0+.
 - Clone/fork `https://github.com/vallewillian-source/open-enroth-vr`.
 - CMake: standalone or VS-provided; add to PATH if needed.
-- Open folder in VS, pick x32/x64, wait for CMake, set startup `OpenEnroth.exe`, run.
+- Open folder in VS, pick x32/x64, wait for CMake, set startup `OpenEnrothVR.exe`, run.
 
 ---
 
