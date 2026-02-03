@@ -1791,9 +1791,9 @@ void VRManager::RenderOverlay3D() {
         localProjection[2][3] = -1.0f;
         localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
-        // Calculate Model Matrix - World Locked
-        if (!m_guiBillboardPoseInitialized) {
-            // Capture head position ONCE when the billboard is first shown
+        // Calculate Model Matrix - Head Locked (Continuous Update)
+        // We update the position only for the first view (Left Eye) to ensure consistency across both eyes in the same frame
+        if (m_currentViewIndex == 0) {
             glm::mat4 invView = glm::inverse(view);
             glm::vec3 camPos = glm::vec3(invView[3]);
             glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
@@ -1801,11 +1801,6 @@ void VRManager::RenderOverlay3D() {
             m_guiBillboardWorldPos = camPos + camFwd * 1.5f;
             m_guiBillboardWorldRot = glm::quat_cast(invView);
             m_guiBillboardPoseInitialized = true;
-            
-            if (logger) {
-                logger->info("VRManager: GUI Billboard Position Initialized at ({}, {}, {})", 
-                             m_guiBillboardWorldPos.x, m_guiBillboardWorldPos.y, m_guiBillboardWorldPos.z);
-            }
         }
 
         // Construct Model Matrix from saved world pose
@@ -2695,15 +2690,35 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     // Determine Button States
     bool leftDown = (triggerLeftState.isActive && triggerLeftState.currentState > 0.5f);
     bool rightDown = (triggerRightState.isActive && triggerRightState.currentState > 0.5f);
+
+    // Reset wait flag if triggers are released
+    if (m_waitForTriggerRelease) {
+        if (!leftDown && !rightDown) {
+            m_waitForTriggerRelease = false;
+        } else {
+            // Suppress input while waiting for release
+            leftDown = false;
+            rightDown = false;
+        }
+    }
     
-    // Output states
+    // Output states - Default mapping
     outLeftDown = leftDown;
     outRightDown = rightDown;
 
     // --- GUI Billboard Mode (House/Shop 2D Overlay) ---
     if (m_showGuiBillboard) {
-        // In this mode, we enforce Raycast for Cursor Position and map Triggers directly to Mouse Buttons.
-        // We explicitly IGNORE list navigation logic (Stick Up/Down) as per user request.
+        // In this mode, we enforce Raycast for Cursor Position.
+        // We map BOTH triggers to Left Click (Select) to ensure usability.
+        // If Right Trigger is used for Left Click, we suppress Right Click output to avoid conflicts.
+        
+        if (rightDown) {
+            outLeftDown = true;
+            outRightDown = false; 
+        } else {
+            outLeftDown = leftDown;
+            outRightDown = false; // Disable right click on triggers in menu for now to prevent accidental info windows
+        }
         
         if (m_leftRayHitGUI) {
              m_menuCursorX = m_guiHitX * menuWidth;
@@ -2721,6 +2736,19 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
         // Output coordinates
         outX = static_cast<int>(m_menuCursorX);
         outY = static_cast<int>(m_menuCursorY);
+
+        // Debug log for click
+        if (outLeftDown && logger) {
+             static bool loggedClick = false;
+             if (!loggedClick) {
+                 logger->info("VRManager: Sending Left Click (X: {}, Y: {})", outX, outY);
+                 loggedClick = true;
+             }
+        } else {
+             static bool loggedClick = false;
+             if (loggedClick && !outLeftDown) loggedClick = false; // Reset log on release
+        }
+
         return true;
     }
 

@@ -77,6 +77,8 @@
 #include "Media/MediaPlayer.h"
 
 #include "Library/Platform/Application/PlatformApplication.h"
+#include "Library/Platform/Interface/PlatformEvents.h"
+#include "Library/Platform/Filters/PlatformEventFilter.h"
 #include "Library/Logger/Logger.h"
 #include "Library/Fsm/Fsm.h"
 
@@ -108,6 +110,12 @@ int Game::run() {
         {
             Fsm *fsm = application->installComponent(GameFsmBuilder::buildFsm(startingState));
             MM_AT_SCOPE_EXIT(application->removeComponent<Fsm>());
+
+            // VR: Enable Billboard Overlay mode for menus (Intro videos, Main Menu, etc.)
+            if (VRManager::Get().IsInitialized()) {
+                VRManager::Get().SetShowGuiBillboard(true);
+            }
+
             while (!fsm->hasReachedExitState()) {
                 render->ClearTarget(colorTable.Black);
                 render->BeginScene2D();
@@ -119,9 +127,76 @@ int Game::run() {
                 GUI_UpdateWindows();
                 render->flushAndScale();
                 engine->drawOverlay();
+
+                // --- VR Rendering Injection ---
+                if (VRManager::Get().IsInitialized()) {
+                    const auto dims = render->GetRenderDimensions();
+                    VRManager::Get().InitOverlay(dims.w, dims.h);
+
+                    render->BindRenderFramebufferForRead();
+                    VRManager::Get().CaptureScreenToOverlay(dims.w, dims.h);
+
+                    if (VRManager::Get().BeginFrame()) {
+                        // Critical: Update Raycast to allow interaction
+                        VRManager::Get().UpdateLeftRay();
+
+                        // --- VR Input Injection ---
+                        int menuX = 0, menuY = 0;
+                        bool menuLeftDown = false, menuRightDown = false;
+                        const auto dims = render->GetRenderDimensions(); // Re-get dims just to be safe, though used above
+                        
+                        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuLeftDown, menuRightDown)) {
+                             if (engine->mouse) {
+                                 engine->mouse->setPosition({menuX, menuY});
+                                 
+                                 static bool prevMenuLeftDown = false;
+                                 if (menuLeftDown && !prevMenuLeftDown) {
+                                     if (current_screen_type == SCREEN_VIDEO) {
+                                         PlatformMouseEvent fakeEvent;
+                                         fakeEvent.type = EVENT_MOUSE_BUTTON_PRESS;
+                                         fakeEvent.button = BUTTON_LEFT;
+                                         fakeEvent.buttons = BUTTON_LEFT;
+                                         fakeEvent.pos = Pointi(menuX, menuY);
+                                         fakeEvent.window = window;
+
+                                         if (fsm) {
+                                             static_cast<PlatformEventFilter*>(fsm)->event(&fakeEvent);
+                                         }
+                                     } else {
+                                         engine->mouse->UI_OnMouseLeftClick();
+                                     }
+                                 }
+                                 prevMenuLeftDown = menuLeftDown;
+                             }
+                        }
+                        // ---------------------------
+
+                        if (VRManager::Get().ShouldRenderFrame()) {
+                            for (int i = 0; i < 2; ++i) {
+                                if (VRManager::Get().AcquireSwapchainTexture(i)) {
+                                    VRManager::Get().BindSwapchainFramebuffer(i);
+                                    render->ClearTarget(colorTable.Black); // Clear VR eye buffer
+
+                                    VRManager::Get().SetCurrentViewIndex(i);
+                                    VRManager::Get().RenderOverlay3D();
+
+                                    VRManager::Get().ReleaseSwapchainTexture(i);
+                                }
+                            }
+                        }
+                        VRManager::Get().EndFrame();
+                    }
+                }
+                // -----------------------------
+
                 render->swapBuffers();
 
                 MessageLoopWithWait();
+            }
+
+            // VR: Disable Billboard Overlay mode when entering the game (or let game logic handle it)
+            if (VRManager::Get().IsInitialized()) {
+                VRManager::Get().SetShowGuiBillboard(false);
             }
         }
 

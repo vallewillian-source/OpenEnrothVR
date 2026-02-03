@@ -119,6 +119,7 @@ public:
     void RenderDialogueMenu();
     void RenderTurnBasedHUD();
     void RenderMinimalCharacterHUD();
+    void UpdateLeftRay();
 
 private:
     void UpdateDialogueTexture();
@@ -165,8 +166,7 @@ private:
     void RenderDebugController();
     void RenderLeftHouseRay();
     void InitRayResources();
-    void UpdateLeftRay();
-
+    
     unsigned int m_rayVAO = 0;
     unsigned int m_rayVBO = 0;
     unsigned int m_rayShader = 0;
