@@ -172,9 +172,9 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
 
 void VRManager::SetShowGuiBillboard(bool enabled) {
     if (enabled && !m_showGuiBillboard) {
-        m_guiBillboardPoseInitialized = false;
+        m_overlayPoseInitialized = false; // Reset World-Locked pose
         if (logger) {
-            logger->info("VRManager: ShowGuiBillboard ENABLED (MVP Character Screen)");
+            logger->info("VRManager: ShowGuiBillboard ENABLED (World-Locked Overlay)");
         }
     }
     m_showGuiBillboard = enabled;
@@ -1347,7 +1347,7 @@ void VRManager::UpdateLeftRay() {
 
     // Check intersection with House Overlay
     m_leftRayHitHouse = false;
-    m_leftRayHitGUI = false;
+    m_leftRayHitOverlay = false;
     m_leftRayLength = 10.0f; // Reset length
 
     if (m_housePoseInitialized && m_debugHouseIndicator) {
@@ -1392,19 +1392,19 @@ void VRManager::UpdateLeftRay() {
         }
     }
 
-    // Check intersection with GUI Billboard
-    if (m_showGuiBillboard && m_guiBillboardPoseInitialized) {
-        glm::vec3 planeNormal = m_guiBillboardWorldRot * glm::vec3(0.0f, 0.0f, 1.0f); // Face towards camera (Z+)
+    // Check intersection with World-Locked Overlay (GUI Billboard)
+    if (m_showGuiBillboard && m_overlayPoseInitialized) {
+        glm::vec3 planeNormal = m_overlayWorldRot * glm::vec3(0.0f, 0.0f, 1.0f); // Face towards camera (Z+)
         float denom = glm::dot(m_leftRayDirection, planeNormal);
         
         // Ray should hit the front face (denom < 0)
         if (denom < -0.0001f) {
-            float t = glm::dot(m_guiBillboardWorldPos - m_leftRayOrigin, planeNormal) / denom;
+            float t = glm::dot(m_overlayWorldPos - m_leftRayOrigin, planeNormal) / denom;
             if (t > 0.0f && t < m_leftRayLength) { // Only if closer than previous hit (house)
                 glm::vec3 hitPoint = m_leftRayOrigin + m_leftRayDirection * t;
                 
                 // Transform to local space of the plane to check bounds
-                glm::vec3 localHit = glm::inverse(m_guiBillboardWorldRot) * (hitPoint - m_guiBillboardWorldPos);
+                glm::vec3 localHit = glm::inverse(m_overlayWorldRot) * (hitPoint - m_overlayWorldPos);
                 
                 // Check bounds (1.2m width, 0.9m height)
                 float width = 1.2f;
@@ -1415,20 +1415,20 @@ void VRManager::UpdateLeftRay() {
                 if (localHit.x >= -halfW && localHit.x <= halfW &&
                         localHit.y >= -halfH && localHit.y <= halfH) {
                     
-                        m_leftRayHitGUI = true;
+                        m_leftRayHitOverlay = true;
                         m_leftRayHitHouse = false; // Override house hit
                         m_leftRayHitPos = hitPoint;
                         m_leftRayLength = t;
                         
                         // Calculate normalized screen coordinates (0..1)
-                        m_guiHitX = (localHit.x / width) + 0.5f;
-                        m_guiHitY = 0.5f - (localHit.y / height);
+                        m_overlayHitX = (localHit.x / width) + 0.5f;
+                        m_overlayHitY = 0.5f - (localHit.y / height);
                         
                         // Optional: Log hit once
-                    static bool loggedGuiHit = false;
-                    if (!loggedGuiHit && logger) {
-                        logger->info("VRManager: Ray Hit GUI Billboard at dist {}, local({},{})", t, localHit.x, localHit.y);
-                        loggedGuiHit = true;
+                    static bool loggedOverlayHit = false;
+                    if (!loggedOverlayHit && logger) {
+                        logger->info("VRManager: Ray Hit World-Locked Overlay at dist {}, local({},{})", t, localHit.x, localHit.y);
+                        loggedOverlayHit = true;
                     }
                 }
             }
@@ -1501,7 +1501,7 @@ void VRManager::RenderLeftHouseRay() {
     glEnable(GL_DEPTH_TEST);
 
     // If hit, draw a cursor at the intersection point
-    if (m_leftRayHitHouse || m_leftRayHitGUI) {
+    if (m_leftRayHitHouse || m_leftRayHitOverlay) {
         RenderDebugCircle(m_leftRayHitPos, 0.015f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red cursor
     }
 }
@@ -1791,21 +1791,45 @@ void VRManager::RenderOverlay3D() {
         localProjection[2][3] = -1.0f;
         localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
-        // Calculate Model Matrix - Head Locked (Continuous Update)
-        // We update the position only for the first view (Left Eye) to ensure consistency across both eyes in the same frame
-        if (m_currentViewIndex == 0) {
-            glm::mat4 invView = glm::inverse(view);
-            glm::vec3 camPos = glm::vec3(invView[3]);
-            glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
-            
-            m_guiBillboardWorldPos = camPos + camFwd * 1.5f;
-            m_guiBillboardWorldRot = glm::quat_cast(invView);
-            m_guiBillboardPoseInitialized = true;
+        // Calculate Model Matrix - World Locked (Fixed in Environment)
+        // We update the position only ONCE when the screen becomes active
+        if (!m_overlayPoseInitialized) {
+             // Capture head position ONCE
+             glm::mat4 invView = glm::inverse(view); // view is current viewMatrix
+             glm::vec3 camPos = glm::vec3(invView[3]);
+             glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+             
+             // Project forward vector to horizontal plane (Y-Up) to keep screen upright and at eye level
+             // OpenXR uses Y-Up coordinate system. Flattening means zeroing Y (Height).
+             glm::vec3 flatFwd = glm::vec3(camFwd.x, 0.0f, camFwd.z);
+             if (glm::length(flatFwd) < 0.01f) {
+                 flatFwd = glm::vec3(0.0f, 0.0f, -1.0f); // Fallback to default Forward (-Z)
+             } else {
+                 flatFwd = glm::normalize(flatFwd);
+             }
+
+             // Position: Eye level (camPos.y) but 1.5m away horizontally
+             // User reported screen feels too low. Raising it by 0.20m to be more comfortable.
+             // Screen height is approx 0.9m. Raising by 0.20m puts the center slightly higher than eyes.
+             m_overlayWorldPos = camPos + flatFwd * 1.5f + glm::vec3(0.0f, 0.20f, 0.0f);
+
+             // Rotation: Face the camera, but keep upright (Yaw only)
+             // We use glm::lookAt to generate a rotation looking at 'flatFwd' direction with Y-Up
+             // The inverse of lookAt gives us the Model rotation where -Z (default view forward) points to flatFwd
+             glm::mat4 lookAtMat = glm::lookAt(glm::vec3(0.0f), flatFwd, glm::vec3(0.0f, 1.0f, 0.0f));
+             m_overlayWorldRot = glm::quat_cast(glm::inverse(lookAtMat));
+
+             m_overlayPoseInitialized = true;
+             
+             if (logger) {
+                 logger->info("VRManager: Overlay Pose Initialized (World Locked - Y-Up Horizon) at ({}, {}, {})", 
+                     m_overlayWorldPos.x, m_overlayWorldPos.y, m_overlayWorldPos.z);
+             }
         }
 
         // Construct Model Matrix from saved world pose
-        glm::mat4 model = glm::mat4_cast(m_guiBillboardWorldRot);
-        model[3] = glm::vec4(m_guiBillboardWorldPos, 1.0f);
+        glm::mat4 model = glm::mat4_cast(m_overlayWorldRot);
+        model[3] = glm::vec4(m_overlayWorldPos, 1.0f);
         // Scaling to match a 4:3 aspect ratio (1.2m width, 0.9m height)
         // Note: Quad vertices are +/- 0.5 (width 1.0) and +/- 0.375 (height 0.75)
         // To get 1.2m width: scale by 1.2. To get 0.9m height: 0.75 * 1.2 = 0.9.
@@ -2720,15 +2744,15 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
             outRightDown = false; // Disable right click on triggers in menu for now to prevent accidental info windows
         }
         
-        if (m_leftRayHitGUI) {
-             m_menuCursorX = m_guiHitX * menuWidth;
-             m_menuCursorY = m_guiHitY * menuHeight;
+        if (m_leftRayHitOverlay) {
+             m_menuCursorX = m_overlayHitX * menuWidth;
+             m_menuCursorY = m_overlayHitY * menuHeight;
              
              if (logger) {
-                static bool loggedGuiRayHit = false;
-                if (!loggedGuiRayHit) {
-                    logger->info("VRManager: Ray hit GUI Billboard. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
-                    loggedGuiRayHit = true;
+                static bool loggedOverlayRayHit = false;
+                if (!loggedOverlayRayHit) {
+                    logger->info("VRManager: Ray hit World-Locked Overlay. Cursor set to X: {}, Y: {}", m_menuCursorX, m_menuCursorY);
+                    loggedOverlayRayHit = true;
                 }
             }
         }

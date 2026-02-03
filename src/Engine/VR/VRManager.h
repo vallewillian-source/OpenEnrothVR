@@ -138,10 +138,20 @@ private:
     float m_houseOverlayWidthMeters = 0.0f;
     float m_houseOverlayHeightMeters = 0.0f;
 
-    // World-locked gui billboard state
-    bool m_guiBillboardPoseInitialized = false;
-    glm::vec3 m_guiBillboardWorldPos = glm::vec3(0.0f);
-    glm::quat m_guiBillboardWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    // World-locked gui billboard state (Deprecated - Use General Overlay)
+    // bool m_guiBillboardPoseInitialized = false;
+    // glm::vec3 m_guiBillboardWorldPos = glm::vec3(0.0f);
+    // glm::quat m_guiBillboardWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+    // General World-Locked Overlay State (Menus, Videos, Gameplay 2D Screens)
+    bool m_overlayPoseInitialized = false;
+    glm::vec3 m_overlayWorldPos = glm::vec3(0.0f);
+    glm::quat m_overlayWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    int m_lastScreenType = -1;
+    bool m_leftRayHitOverlay = false;
+    float m_overlayHitX = 0.0f;
+    float m_overlayHitY = 0.0f;
+
 
     bool CreateInstance();
     bool GetSystem();
@@ -179,12 +189,9 @@ private:
     float m_leftRayLength = 5.0f;
     bool m_leftRayValid = false;
     bool m_leftRayHitHouse = false;
-    bool m_leftRayHitGUI = false;
     glm::vec3 m_leftRayHitPos = glm::vec3(0.0f);
     float m_houseHitX = 0.0f;
     float m_houseHitY = 0.0f;
-    float m_guiHitX = 0.0f;
-    float m_guiHitY = 0.0f;
     glm::vec3 m_leftRayOrigin = glm::vec3(0.0f);
     glm::vec3 m_leftRayDirection = glm::vec3(0.0f, 0.0f, -1.0f);
 
