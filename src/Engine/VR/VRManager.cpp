@@ -2373,7 +2373,9 @@ bool VRManager::BeginFrame() {
         float nearZ = 4.0f; // Default near
         float farZ = 30000.0f; // Default far
         if (pCamera3D) {
-            nearZ = pCamera3D->GetNearClip();
+            // VR requires a closer near clip. If config is too large (default 32), clamp it to prevent clipping in dungeons.
+            float configNear = pCamera3D->GetNearClip();
+            nearZ = (configNear > 10.0f) ? 8.0f : configNear;
             farZ = pCamera3D->GetFarClip();
         }
 

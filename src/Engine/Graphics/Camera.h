@@ -97,6 +97,13 @@ struct Camera3D {
 
     float GetNearClip() const;
     float GetFarClip() const;
+
+    // VR Frustum Parameters
+    bool bIsVRProjection = false;
+    float vrTanL = 0.0f;
+    float vrTanR = 0.0f;
+    float vrTanU = 0.0f;
+    float vrTanD = 0.0f;
 };
 
 extern Camera3D *pCamera3D;

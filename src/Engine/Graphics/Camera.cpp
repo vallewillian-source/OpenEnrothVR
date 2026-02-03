@@ -20,7 +20,11 @@ float Camera3D::GetMouseInfoDepth() {
 }
 
 float Camera3D::GetNearClip() const {
-    return engine->config->graphics.ClipNearDistance.value();
+    float val = engine->config->graphics.ClipNearDistance.value();
+    if (bIsVRProjection && val > 8.0f) {
+        return 8.0f;
+    }
+    return val;
 }
 
 float Camera3D::GetFarClip() const {
@@ -211,6 +215,13 @@ void Camera3D::SetProjectionVR(float tanL, float tanR, float tanU, float tanD) {
 
     screenScaleY = h / (tanU - tanD);
     screenCenterY = pViewport.y + h * tanU / (tanU - tanD);
+
+    // Store VR tangents for frustum culling
+    vrTanL = tanL;
+    vrTanR = tanR;
+    vrTanU = tanU;
+    vrTanD = tanD;
+    bIsVRProjection = true;
 }
 
 void Camera3D::SetViewMatrixVR(const glm::mat4& viewMat) {
@@ -254,10 +265,38 @@ void Camera3D::SetViewMatrixVR(const glm::mat4& viewMat) {
 
 void Camera3D::ResetProjection() {
     CreateViewMatrixAndProjectionScale();
+    bIsVRProjection = false;
 }
 
 //----- (004374E8) --------------------------------------------------------
 void Camera3D::BuildViewFrustum() {
+    if (bIsVRProjection) {
+        glm::vec3 PlaneVec;
+
+        // In view space: +X = depth forward, +Y = left, +Z = up.
+        // Using OpenXR tangents, construct normals equivalent to (cos, ±sin, 0) etc.
+        // Left plane normal: normalize( (-tanL, -1, 0) ) -> Points Right (Inward)
+        PlaneVec = glm::normalize(glm::vec3(-vrTanL, -1.0f, 0.0f));
+        FrustumPlanes[0] = glm::vec4(ViewMatrix * PlaneVec, 1.0f);
+        FrustumPlanes[0].w = glm::dot(glm::vec3(FrustumPlanes[0]), vCameraPos);
+
+        // Right plane normal: normalize( (tanR, 1, 0) ) -> Points Left (Inward)
+        PlaneVec = glm::normalize(glm::vec3(vrTanR, 1.0f, 0.0f));
+        FrustumPlanes[1] = glm::vec4(ViewMatrix * PlaneVec, 1.0f);
+        FrustumPlanes[1].w = glm::dot(glm::vec3(FrustumPlanes[1]), vCameraPos);
+
+        // Top plane normal: normalize( (tanU, 0, -1) ) -> Points Down (Inward)
+        PlaneVec = glm::normalize(glm::vec3(vrTanU, 0.0f, -1.0f));
+        FrustumPlanes[2] = glm::vec4(ViewMatrix * PlaneVec, 1.0f);
+        FrustumPlanes[2].w = glm::dot(glm::vec3(FrustumPlanes[2]), vCameraPos);
+
+        // Bottom plane normal: normalize( (-tanD, 0, 1) ) -> Points Up (Inward)
+        PlaneVec = glm::normalize(glm::vec3(-vrTanD, 0.0f, 1.0f));
+        FrustumPlanes[3] = glm::vec4(ViewMatrix * PlaneVec, 1.0f);
+        FrustumPlanes[3].w = glm::dot(glm::vec3(FrustumPlanes[3]), vCameraPos);
+        return;
+    }
+
     float HalfAngleX = (pi / 2.0) - (odm_fov_rad / 2.0);
     float HalfAngleY = (pi / 2.0) - (std::atan((pViewport.h / 2.0) / pCamera3D->ViewPlaneDistPixels));
 
